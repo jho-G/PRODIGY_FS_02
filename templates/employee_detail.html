@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+
+{% block title %}Employee Details - EMS{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h4 class="mb-0"><i class="bi bi-person-badge"></i> Employee Details</h4>
+                <div>
+                    <a href="{% url 'employee_update' employee.pk %}" class="btn btn-light btn-sm">
+                        <i class="bi bi-pencil"></i> Edit
+                    </a>
+                    <a href="{% url 'employee_list' %}" class="btn btn-light btn-sm">
+                        <i class="bi bi-arrow-left"></i> Back
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5 class="border-bottom pb-2">Personal Information</h5>
+                        <table class="table table-borderless">
+                            <tr>
+                                <th style="width: 150px;">Employee ID:</th>
+                                <td><span class="badge bg-primary fs-6">{{ employee.employee_id }}</span></td>
+                            </tr>
+                            <tr>
+                                <th>Full Name:</th>
+                                <td>{{ employee.first_name }} {{ employee.last_name }}</td>
+                            </tr>
+                            <tr>
+                                <th>Email:</th>
+                                <td>{{ employee.email }}</td>
+                            </tr>
+                            <tr>
+                                <th>Phone:</th>
+                                <td>{{ employee.phone_number|default:"Not provided" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Date of Birth:</th>
+                                <td>{{ employee.date_of_birth|date:"F d, Y" }} ({{ employee.age }} years)</td>
+                            </tr>
+                            <tr>
+                                <th>Gender:</th>
+                                <td>{{ employee.get_gender_display }}</td>
+                            </tr>
+                            <tr>
+                                <th>Address:</th>
+                                <td>{{ employee.address|linebreaksbr }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h5 class="border-bottom pb-2">Employment Information</h5>
+                        <table class="table table-borderless">
+                            <tr>
+                                <th style="width: 150px;">Department:</th>
+                                <td>{{ employee.department.name|default:"Not assigned" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Position:</th>
+                                <td>{{ employee.position }}</td>
+                            </tr>
+                            <tr>
+                                <th>Hire Date:</th>
+                                <td>{{ employee.hire_date|date:"F d, Y" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Employment Status:</th>
+                                <td>
+                                    {% if employee.employment_status == 'FT' %}
+                                        <span class="badge bg-success">Full-time</span>
+                                    {% elif employee.employment_status == 'PT' %}
+                                        <span class="badge bg-info">Part-time</span>
+                                    {% elif employee.employment_status == 'CT' %}
+                                        <span class="badge bg-warning">Contract</span>
+                                    {% else %}
+                                        <span class="badge bg-primary">Intern</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Salary:</th>
+                                <td>${{ employee.salary|floatformat:2 }}</td>
+                            </tr>
+                        </table>
+                        
+                        <h5 class="border-bottom pb-2 mt-4">System Information</h5>
+                        <table class="table table-borderless">
+                            <tr>
+                                <th style="width: 150px;">Created By:</th>
+                                <td>{{ employee.created_by.username|default:"System" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Created At:</th>
+                                <td>{{ employee.created_at|date:"F d, Y H:i" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Last Updated:</th>
+                                <td>{{ employee.updated_at|date:"F d, Y H:i" }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

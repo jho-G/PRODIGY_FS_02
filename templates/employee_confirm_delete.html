@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete Employee - EMS{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow border-danger">
+            <div class="card-header bg-danger text-white">
+                <h4 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Confirm Delete</h4>
+            </div>
+            <div class="card-body">
+                <p class="fs-5">Are you sure you want to delete the following employee?</p>
+                
+                <div class="alert alert-warning">
+                    <strong>{{ employee.first_name }} {{ employee.last_name }}</strong><br>
+                    Employee ID: {{ employee.employee_id }}<br>
+                    Department: {{ employee.department.name|default:"Not assigned" }}<br>
+                    Position: {{ employee.position }}
+                </div>
+                
+                <p class="text-danger"><i class="bi bi-info-circle"></i> This action cannot be undone. The employee will be deactivated from the system.</p>
+                
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{% url 'employee_list' %}" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash"></i> Confirm Delete
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
