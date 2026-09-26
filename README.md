@@ -1,63 +1,60 @@
-# Employee Management System (EMS)
+# Employee Management System (EMS) — Backend API (Django & DRF)
 
-A clean, modern, and role-based web application built with **Django** and **Bootstrap 5** to streamline workforce administration, manage organizational departments, and maintain accurate employee records.
+A robust, scalable RESTful API built with **Django** and **Django REST Framework (DRF)** to power an Employee Management System. This API serves as the core backend service, featuring token-based authentication, CRUD operations, dynamic search, multi-criteria filtering, soft-delete capabilities, and statistical metrics ready for integration with a **React.js** frontend.
 
 ---
 
 ## 📖 Description
 
-The **Employee Management System (EMS)** is designed to assist HR teams, team leaders, and administrators in managing an organization's personnel data efficiently. It offers a secure, intuitive dashboard for handling day-to-day employee lifecycle tasks—from onboarding to record updates and safe archival.
+The **Employee Management System (EMS)** backend is designed for HR personnel, team leaders, and administrators to handle workforce data efficiently. The architecture has transitioned away from traditional server-rendered HTML templates into a decoupled, modern API service utilizing Django REST Framework.
 
 ### Key Features
 
-- **User Authentication & Access Control:**
-  - Secure login/logout system with session management.
-  - Protected routes restricting access to authenticated staff members.
-  - Automatic attribution tracking (`created_by` user for employee records).
+- **Decoupled RESTful Architecture:**
+  - Standardized JSON responses for all resources.
+  - CORS-enabled (`django-cors-headers`) for seamless connection with frontend single-page applications (React.js).
+  - Django REST Framework's interactive Browsable API for in-browser testing and exploration.
 
-- **Comprehensive Employee Records:**
-  - **Personal Details:** Full name, email, phone number, date of birth, age (auto-calculated), gender, and residential address.
-  - **Employment Details:** Unique Employee ID, department assignment, job position, hire date, employment status (*Full-time, Part-time, Contract, Intern*), and salary.
+- **Authentication & Security:**
+  - Token-based authentication (`rest_framework.authtoken`) for secure API client access.
+  - Endpoints for user login, logout, and fetching current authenticated profile data.
+  - Automatic attribution: each employee record tracks who created it (`created_by`).
 
-- **Dynamic Search & Filtering:**
-  - Real-time text search across employee names, employee IDs, email addresses, and positions.
-  - Department-based dropdown filtering for streamlined list viewing.
+- **Department & Employee Resource Management:**
+  - **Departments:** Full CRUD for organizational departments with computed active employee counts.
+  - **Employees:** Full CRUD supporting rich personal and employment profiles (unique Employee IDs, email validation, phone regex, age calculation, employment status, salary).
 
-- **Full CRUD Capabilities:**
-  - **Create:** Add new employee records with validation checks for duplicate email or employee ID.
-  - **Read:** Dedicated profile overview with structured personal and professional information.
-  - **Update:** Modify existing employee information through intuitive forms.
-  - **Soft Delete:** Safe deactivation mechanism (`is_active=False`) preserving historical records without loss of database integrity.
-
-- **Responsive & Polished Interface:**
-  - Built using **Bootstrap 5**, **Bootstrap Icons**, and **Crispy Forms** for a clean, mobile-friendly experience.
-  - Interactive toast/alert messages for system feedback and action confirmations.
+- **Advanced Querying & Metrics:**
+  - Search across first name, last name, employee ID, email, and position.
+  - Filter by department ID, employment status (`FT`, `PT`, `CT`, `IN`), and active status.
+  - Safe soft-delete (`is_active=False`) with a dedicated `/restore/` endpoint and optional hard deletion (`?hard=true`).
+  - Aggregated metrics endpoint (`/api/employees/stats/`) delivering dashboard-ready analytics.
 
 ---
 
 ## 🛠️ Technology Stack
 
-- **Backend:** Python 3.10+, Django 5.x
-- **Frontend:** HTML5, CSS3, Bootstrap 5, Bootstrap Icons, JavaScript
-- **Forms & UI Integration:** `django-crispy-forms`, `crispy-bootstrap5`
-- **Database:** SQLite (default for development; easily configurable to PostgreSQL/MySQL)
+- **Framework:** Django 5.x, Django REST Framework (DRF) 3.15+
+- **CORS Handling:** `django-cors-headers`
+- **Authentication:** Token & Session Authentication (`rest_framework.authtoken`)
+- **Database:** SQLite (default for development; compatible with PostgreSQL/MySQL)
+- **Language:** Python 3.10+
 
 ---
 
-## 🚀 How to Run It
+## 🚀 How to Run the Backend
 
-Follow the step-by-step instructions below to set up and run the project locally on your machine.
+Follow these step-by-step instructions to set up and run the Django DRF backend server locally.
 
 ### Prerequisites
 
-Ensure you have the following installed on your system:
 - [Python 3.10+](https://www.python.org/downloads/)
-- `pip` (Python package installer)
-- `git` (optional, for version control)
+- `pip` package manager
+- Virtual environment tool (`venv`)
 
 ---
 
-### Step 1: Clone or Navigate to the Project Directory
+### Step 1: Navigate to the Project Directory
 
 ```bash
 cd /path/to/PRODIGY_FS_02
@@ -67,21 +64,19 @@ cd /path/to/PRODIGY_FS_02
 
 ### Step 2: Create and Activate a Virtual Environment
 
-It is recommended to use an isolated Python virtual environment:
-
-- **On Linux / macOS:**
+- **Linux / macOS:**
   ```bash
   python3 -m venv venv
   source venv/bin/activate
   ```
 
-- **On Windows (Command Prompt):**
+- **Windows (Command Prompt):**
   ```cmd
   python -m venv venv
   venv\Scripts\activate
   ```
 
-- **On Windows (PowerShell):**
+- **Windows (PowerShell):**
   ```powershell
   python -m venv venv
   .\venv\Scripts\Activate.ps1
@@ -91,8 +86,6 @@ It is recommended to use an isolated Python virtual environment:
 
 ### Step 3: Install Required Dependencies
 
-Install the project dependencies using `pip`:
-
 ```bash
 pip install -r requirements.txt
 ```
@@ -101,7 +94,7 @@ pip install -r requirements.txt
 
 ### Step 4: Apply Database Migrations
 
-Generate and run the database migrations to set up the SQLite database schema:
+Create and run database migrations to prepare the database schema and authentication tables:
 
 ```bash
 python manage.py makemigrations employees
@@ -110,70 +103,108 @@ python manage.py migrate
 
 ---
 
-### Step 5: Create a Superuser (Admin Account)
+### Step 5: Create an Admin / Superuser Account
 
-To access the Django Admin panel and log into the system, create an administrator account:
+Create an administrative user to log in and obtain an authentication token:
 
 ```bash
 python manage.py createsuperuser
 ```
-Follow the prompts to enter a **username**, **email address**, and **password**.
+Provide a **username**, **email**, and **password** when prompted.
 
 ---
 
 ### Step 6: Start the Development Server
 
-Launch the Django development server:
+Run the development server:
 
 ```bash
 python manage.py runserver
 ```
 
-You should see output indicating that the server is running at `http://127.0.0.1:8000/`.
+The API will be accessible at: **`http://127.0.0.1:8000/api/`**
 
 ---
 
-### Step 7: Open the Application in Your Browser
+## 📡 API Reference & Endpoints
 
-1. Navigate to: **[http://127.0.0.1:8000/](http://127.0.0.1:8000/)**
-2. Log in using the superuser credentials created in Step 5.
-3. Once logged in, you will be redirected to the **Employee Dashboard** (`/employees/`).
+Base URL: `http://127.0.0.1:8000/api/`
 
-> **Tip:** You can visit **[http://127.0.0.1:8000/admin/](http://127.0.0.1:8000/admin/)** to manage Departments, Users, and groups directly through the Django Admin interface.
+### 1. Authentication Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|---|---|---|---|
+| `POST` | `/api/auth/login/` | Authenticate with `username` & `password`. Returns auth `token` and user profile. | No |
+| `POST` | `/api/auth/logout/` | Invalidate and delete current auth token. | Yes |
+| `GET` | `/api/auth/user/` | Retrieve current authenticated user profile. | Yes |
+
+#### Authentication Header
+Include the token in request headers for protected endpoints:
+```http
+Authorization: Token <your_token_key_here>
+```
 
 ---
 
-## 📁 Project Directory Structure
+### 2. Department Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/departments/` | List all departments (includes active employee count). |
+| `POST` | `/api/departments/` | Create a new department (`name`, `description`). |
+| `GET` | `/api/departments/{id}/` | Retrieve department details. |
+| `PUT` / `PATCH` | `/api/departments/{id}/` | Update department details. |
+| `DELETE` | `/api/departments/{id}/` | Delete a department. |
+
+---
+
+### 3. Employee Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/employees/` | List employees (paginated, supports search and filtering). |
+| `POST` | `/api/employees/` | Create a new employee record. |
+| `GET` | `/api/employees/{id}/` | Retrieve employee full profile (includes computed age). |
+| `PUT` / `PATCH` | `/api/employees/{id}/` | Update employee information. |
+| `DELETE` | `/api/employees/{id}/` | Soft delete employee (`is_active=False`). Use `?hard=true` for permanent delete. |
+| `POST` | `/api/employees/{id}/restore/` | Restore a deactivated employee. |
+| `GET` | `/api/employees/stats/` | Retrieve aggregate workforce metrics for dashboard display. |
+
+#### Query Parameters for `/api/employees/`
+- `?search=<term>`: Search across `first_name`, `last_name`, `employee_id`, `email`, and `position`.
+- `?department=<id>`: Filter by department ID.
+- `?employment_status=<FT|PT|CT|IN>`: Filter by employment status.
+- `?is_active=<true|false>`: Filter by active/inactive state (default: `true`).
+- `?all=true`: Return all records regardless of active status.
+- `?ordering=<field>`: Order results (e.g. `ordering=-created_at`, `ordering=salary`).
+- `?page=<number>`: Page navigation.
+
+---
+
+## 📁 Project Structure
 
 ```text
 PRODIGY_FS_02/
-├── employee_system/          # Core Django project configuration
+├── employee_system/          # Project configuration
 │   ├── __init__.py
 │   ├── asgi.py
-│   ├── settings.py           # Application settings, installed apps, crispy config
-│   ├── urls.py               # Main URL routing
+│   ├── settings.py           # DRF, CORS, Auth token & Database config
+│   ├── urls.py               # Root URL configuration (/api/ & /admin/)
 │   └── wsgi.py
-├── employees/                # Employee management app
-│   ├── admin.py              # Admin model registrations
+├── employees/                # Employee management API app
+│   ├── admin.py              # Django admin registration
 │   ├── apps.py
-│   ├── forms.py              # Login, employee create, and update forms
-│   ├── models.py             # Department and Employee data models
-│   ├── urls.py               # Employee routing (CRUD, login/logout)
-│   └── views.py              # Business logic for authentication & CRUD
-├── templates/                # HTML templates styled with Bootstrap 5
-│   ├── base.html             # Base layout template with navbar and scripts
-│   ├── employee_confirm_delete.html
-│   ├── employee_detail.html
-│   ├── employee_form.html
-│   ├── employee_list.html
-│   └── login.html
-├── manage.py                 # Django command-line utility
-├── requirements.txt          # Python dependencies
+│   ├── models.py             # Department and Employee models
+│   ├── serializers.py        # DRF serializers (Employee, Department, User, Login)
+│   ├── urls.py               # DRF routers and auth endpoint routing
+│   └── views.py              # ViewSets (Employee, Department) and Auth APIViews
+├── manage.py                 # Django management utility
+├── requirements.txt          # Dependencies (Django, DRF, django-cors-headers)
 └── README.md                 # Project documentation
 ```
 
 ---
 
-## 📄 License
+## 🔮 Next Phase
 
-This project was developed for educational and portfolio demonstration purposes.
+In the upcoming phase, the modern **React.js** frontend will be integrated with these endpoints to provide a dynamic Single Page Application (SPA) dashboard.
