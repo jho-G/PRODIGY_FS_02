@@ -1,0 +1,225 @@
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.dashboard-hero {
+  background: linear-gradient(135deg, #3730a3 0%, #4f46e5 50%, #4338ca 100%);
+  color: #ffffff;
+  border-radius: var(--radius-lg);
+  padding: 32px 36px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.hero-left h1 {
+  color: #ffffff;
+  font-size: 1.85rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.hero-left p {
+  color: #c7d2fe;
+  font-size: 0.95rem;
+  max-width: 600px;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Metric Cards */
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.metric-icon-box {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.metric-data {
+  display: flex;
+  flex-direction: column;
+}
+
+.metric-number {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.metric-title {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+/* Visual Breakdown Section */
+.breakdown-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.breakdown-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 26px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+
+.breakdown-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.breakdown-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Department Progress Bars */
+.dept-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dept-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dept-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+}
+
+.dept-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dept-count {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.dept-progress-track {
+  width: 100%;
+  height: 8px;
+  background-color: var(--bg-page);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.dept-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4f46e5, #06b6d4);
+  border-radius: var(--radius-full);
+  transition: width 0.4s ease;
+}
+
+/* Status Cards Grid */
+.status-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.status-stat-card {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-page);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.status-stat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-tag {
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.status-count {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.status-label {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}

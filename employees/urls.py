@@ -1,12 +1,23 @@
-from django.urls import path
-from . import views
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import (
+    DepartmentViewSet,
+    EmployeeViewSet,
+    LoginAPIView,
+    LogoutAPIView,
+    CurrentUserAPIView,
+)
+
+router = DefaultRouter()
+router.register(r'departments', DepartmentViewSet, basename='department')
+router.register(r'employees', EmployeeViewSet, basename='employee')
 
 urlpatterns = [
-    path('', views.employee_list, name='employee_list'),
-    path('login/', views.login_view, name='login'),
-    path('logout/', views.logout_view, name='logout'),
-    path('employee/create/', views.employee_create, name='employee_create'),
-    path('employee/<int:pk>/', views.employee_detail, name='employee_detail'),
-    path('employee/<int:pk>/update/', views.employee_update, name='employee_update'),
-    path('employee/<int:pk>/delete/', views.employee_delete, name='employee_delete'),
+    # Authentication endpoints
+    path('auth/login/', LoginAPIView.as_view(), name='api_login'),
+    path('auth/logout/', LogoutAPIView.as_view(), name='api_logout'),
+    path('auth/user/', CurrentUserAPIView.as_view(), name='api_user'),
+
+    # DRF Router endpoints (/api/departments/, /api/employees/)
+    path('', include(router.urls)),
 ]
