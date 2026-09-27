@@ -148,6 +148,38 @@ The API will be accessible at: **`http://127.0.0.1:8000/api/`**
 
 ---
 
+## 🐳 Running with Docker (Backend + Frontend)
+
+The entire full-stack system is fully containerized using **Docker** and **Docker Compose**.
+
+### Start All Services
+
+From the project root directory, run:
+
+```bash
+docker-compose up --build
+```
+
+- **React Frontend:** Access at **`http://localhost:5173`** or **`http://localhost`**
+- **Django API Backend:** Access at **`http://localhost:8000/api/`**
+- **Django Admin:** Access at **`http://localhost:8000/admin/`**
+
+### Create Admin / Superuser in Docker
+
+To create an administrative user inside the running backend container:
+
+```bash
+docker-compose exec backend python manage.py createsuperuser
+```
+
+### Stop Containers
+
+```bash
+docker-compose down
+```
+
+---
+
 ## 📡 API Reference & Endpoints
 
 Base URL: `http://127.0.0.1:8000/api/`
