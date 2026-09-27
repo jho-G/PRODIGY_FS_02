@@ -116,13 +116,35 @@ Provide a **username**, **email**, and **password** when prompted.
 
 ### Step 6: Start the Development Server
 
-Run the development server:
+Make sure your virtual environment is active (your prompt should show `(venv)`):
 
 ```bash
 python manage.py runserver
 ```
 
+> **Note:** If `python` gives `command not found` (e.g. with `pyenv`), either activate your virtual environment (`source venv/bin/activate`), set your pyenv version (`pyenv local 3.11.9`), or run with `python3 manage.py runserver`.
+
 The API will be accessible at: **`http://127.0.0.1:8000/api/`**
+
+---
+
+### ⚠️ Troubleshooting Common Setup Errors
+
+- **`pyenv: python: command not found`**
+  - **Reason:** Pyenv is managing your Python versions, but no local/global version is active, or the virtual environment has not been activated.
+  - **Fix 1 (Activate Virtual Environment):**
+    ```bash
+    source venv/bin/activate
+    ```
+    *(Once activated, `python` will point directly to your virtual environment's Python interpreter).*
+  - **Fix 2 (Set Pyenv Version):**
+    ```bash
+    pyenv local 3.11.9
+    ```
+  - **Fix 3 (Direct python3 invocation):**
+    ```bash
+    python3 manage.py runserver
+    ```
 
 ---
 
