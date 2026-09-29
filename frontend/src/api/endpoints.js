@@ -128,3 +128,119 @@ export const leaveApi = {
     return response.data;
   },
 };
+
+/**
+ * Attendance Endpoints
+ */
+export const attendanceApi = {
+  // Supports query params: { employee, date, date_after, date_before, status, ordering, page }
+  getAll: async (params = {}) => {
+    const response = await api.get('attendance/', { params });
+    return response.data;
+  },
+  getById: async (id) => {
+    const response = await api.get(`attendance/${id}/`);
+    return response.data;
+  },
+  create: async (data) => {
+    const response = await api.post('attendance/', data);
+    return response.data;
+  },
+  update: async (id, data) => {
+    const response = await api.patch(`attendance/${id}/`, data);
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await api.delete(`attendance/${id}/`);
+    return response.data;
+  },
+  checkIn: async (id) => {
+    const response = await api.post(`attendance/${id}/check_in/`);
+    return response.data;
+  },
+  checkOut: async (id) => {
+    const response = await api.post(`attendance/${id}/check_out/`);
+    return response.data;
+  },
+  // Supports query params: { year, month }
+  getSummary: async (params = {}) => {
+    const response = await api.get('attendance/summary/', { params });
+    return response.data;
+  },
+};
+
+/**
+ * Payroll (Payslip) Endpoints
+ */
+export const payrollApi = {
+  // Supports query params: { employee, department, year, month, ordering, page }
+  getAll: async (params = {}) => {
+    const response = await api.get('payslips/', { params });
+    return response.data;
+  },
+  getById: async (id) => {
+    const response = await api.get(`payslips/${id}/`);
+    return response.data;
+  },
+  create: async (data) => {
+    const response = await api.post('payslips/', data);
+    return response.data;
+  },
+  update: async (id, data) => {
+    const response = await api.patch(`payslips/${id}/`, data);
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await api.delete(`payslips/${id}/`);
+    return response.data;
+  },
+  // Bulk-generate payslips for all active employees for a period
+  generate: async ({ year, month } = {}) => {
+    const response = await api.post('payslips/generate/', { year, month });
+    return response.data;
+  },
+  // Supports query params: { year, month }
+  getSummary: async (params = {}) => {
+    const response = await api.get('payslips/summary/', { params });
+    return response.data;
+  },
+};
+
+/**
+ * Performance Review Endpoints
+ */
+export const performanceApi = {
+  // Supports query params: { employee, department, status, review_period, search, ordering, page }
+  getAll: async (params = {}) => {
+    const response = await api.get('performance-reviews/', { params });
+    return response.data;
+  },
+  getById: async (id) => {
+    const response = await api.get(`performance-reviews/${id}/`);
+    return response.data;
+  },
+  create: async (data) => {
+    const response = await api.post('performance-reviews/', data);
+    return response.data;
+  },
+  update: async (id, data) => {
+    const response = await api.patch(`performance-reviews/${id}/`, data);
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await api.delete(`performance-reviews/${id}/`);
+    return response.data;
+  },
+  complete: async (id) => {
+    const response = await api.post(`performance-reviews/${id}/complete/`);
+    return response.data;
+  },
+  acknowledge: async (id) => {
+    const response = await api.post(`performance-reviews/${id}/acknowledge/`);
+    return response.data;
+  },
+  getSummary: async () => {
+    const response = await api.get('performance-reviews/summary/');
+    return response.data;
+  },
+};
