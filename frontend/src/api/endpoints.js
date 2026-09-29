@@ -48,7 +48,7 @@ export const departmentApi = {
  * Employee Endpoints
  */
 export const employeeApi = {
-  // Supports query params: { search, department, employment_status, is_active, all, ordering, page }
+  // Supports query params: { search, department, employment_status, is_active, all, ordering, page, min_salary, max_salary, min_experience }
   getAll: async (params = {}) => {
     const response = await api.get('employees/', { params });
     return response.data;
@@ -78,6 +78,53 @@ export const employeeApi = {
   },
   getStats: async () => {
     const response = await api.get('employees/stats/');
+    return response.data;
+  },
+  // Downloads the filtered employee directory as a CSV file
+  exportCsv: async (params = {}) => {
+    const response = await api.get('employees/export/', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+};
+
+/**
+ * Leave Request Endpoints
+ */
+export const leaveApi = {
+  // Supports query params: { employee, status, leave_type, search, ordering, page }
+  getAll: async (params = {}) => {
+    const response = await api.get('leaves/', { params });
+    return response.data;
+  },
+  getById: async (id) => {
+    const response = await api.get(`leaves/${id}/`);
+    return response.data;
+  },
+  create: async (data) => {
+    const response = await api.post('leaves/', data);
+    return response.data;
+  },
+  update: async (id, data) => {
+    const response = await api.patch(`leaves/${id}/`, data);
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await api.delete(`leaves/${id}/`);
+    return response.data;
+  },
+  approve: async (id) => {
+    const response = await api.post(`leaves/${id}/approve/`);
+    return response.data;
+  },
+  reject: async (id) => {
+    const response = await api.post(`leaves/${id}/reject/`);
+    return response.data;
+  },
+  cancel: async (id) => {
+    const response = await api.post(`leaves/${id}/cancel/`);
     return response.data;
   },
 };
