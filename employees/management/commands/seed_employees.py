@@ -7,12 +7,12 @@ Usage:
     python manage.py seed_employees --count 60  # custom employee count
 """
 import random
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from employees.models import Department, Employee, LeaveRequest
+from employees.models import AttendanceRecord, Department, Employee, LeaveRequest
 
 
 FIRST_NAMES = [
@@ -221,7 +221,51 @@ class Command(BaseCommand):
             reviewed_by=admin
         )
 
+        # --- Attendance records (last 30 days) ----------------------------
+        # Skip weekends; simulate check-in/out with occasional late arrivals
+        # and absences so dashboards have realistic distributions.
+        active_employees = [e for e in employees if e.employment_status != 'IN']
+        attendance_records = []
+        for day_offset in range(30, -1, -1):
+            day = date.today() - timedelta(days=day_offset)
+            if day.weekday() >= 5:  # Saturday/Sunday
+                continue
+            for emp in active_employees:
+                roll = random.random()
+                if roll < 0.06:
+                    status = 'ABSENT'
+                    check_in = None
+                    check_out = None
+                elif roll < 0.12:
+                    status = 'LEAVE'
+                    check_in = None
+                    check_out = None
+                elif roll < 0.22:
+                    status = 'REMOTE'
+                    check_in = time(8, random.randint(25, 59))
+                    check_out = time(17, random.randint(0, 59))
+                elif roll < 0.30:
+                    status = 'LATE'
+                    check_in = time(9, random.randint(1, 40))
+                    check_out = time(17, random.randint(30, 59))
+                else:
+                    status = 'PRESENT'
+                    check_in = time(8, random.randint(40, 59))
+                    check_out = time(17, random.randint(0, 45))
+
+                attendance_records.append(AttendanceRecord(
+                    employee=emp,
+                    date=day,
+                    status=status,
+                    check_in=check_in,
+                    check_out=check_out,
+                    notes='',
+                ))
+
+        AttendanceRecord.objects.bulk_create(attendance_records, batch_size=100, ignore_conflicts=True)
+
         self.stdout.write(self.style.SUCCESS(
             f'Seeded {len(departments)} departments, {len(employees)} employees, '
-            f'and {len(leave_requests)} leave requests.'
+            f'{len(leave_requests)} leave requests, and {len(attendance_records)} '
+            f'attendance records.'
         ))
