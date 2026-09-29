@@ -169,6 +169,11 @@ class Command(BaseCommand):
                 date_of_birth=date_of_birth,
                 gender=random.choices(GENDERS, weights=GENDER_WEIGHTS)[0],
                 address=f'{random.randint(1, 500)} {random.choice(["Main St", "Bole Rd", "Ringo Rd", "Summit", "CMC", "Gerji", "Piazza", "Kality"])} Ave, Addis Ababa',
+                emergency_contact_name=f'{random.choice(FIRST_NAMES)} {last}',
+                emergency_contact_phone=f'+2519{random.randint(10000000, 99999999)}',
+                emergency_contact_relation=random.choice(
+                    ['Spouse', 'Parent', 'Sibling', 'Friend', 'Guardian']
+                ),
                 department=random.choice(list(departments.values())),
                 position=position,
                 employment_status=employment_status,

@@ -42,6 +42,17 @@ class Employee(models.Model):
     date_of_birth = models.DateField()
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES)
     address = models.TextField()
+
+    # Emergency contact
+    emergency_contact_name = models.CharField(max_length=100, blank=True)
+    emergency_contact_phone = models.CharField(
+        validators=[phone_regex], max_length=17, blank=True,
+        help_text="Phone number of the emergency contact.",
+    )
+    emergency_contact_relation = models.CharField(
+        max_length=50, blank=True,
+        help_text="Relationship to the employee, e.g. Spouse, Parent, Sibling.",
+    )
     
     # Employment Details
     employee_id = models.CharField(max_length=20, unique=True)
@@ -280,3 +291,80 @@ class Payslip(models.Model):
     def period_label(self):
         import calendar
         return f"{calendar.month_name[self.period_month]} {self.period_year}"
+
+
+class PerformanceReview(models.Model):
+    """
+    Periodic performance evaluation with weighted competency scores.
+    Overall rating is the average of the individual competency scores.
+    """
+
+    STATUS_CHOICES = [
+        ('DRAFT', 'Draft'),
+        ('COMPLETED', 'Completed'),
+        ('ACKNOWLEDGED', 'Acknowledged by employee'),
+    ]
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name='performance_reviews'
+    )
+    reviewer = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='conducted_performance_reviews',
+    )
+    review_period = models.CharField(
+        max_length=20,
+        help_text="e.g. '2026-Q1' or '2026 Annual'",
+    )
+    review_date = models.DateField(default=date.today)
+
+    # Competency scores (1-5)
+    productivity = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)], default=3,
+    )
+    quality = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)], default=3,
+    )
+    teamwork = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)], default=3,
+    )
+    communication = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)], default=3,
+    )
+    leadership = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)], default=3,
+    )
+
+    strengths = models.TextField(blank=True)
+    areas_for_improvement = models.TextField(blank=True)
+    goals = models.TextField(blank=True)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='DRAFT')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-review_date']
+
+    def __str__(self):
+        return f"{self.employee} - {self.review_period}"
+
+    @property
+    def overall_rating(self):
+        scores = [
+            self.productivity, self.quality, self.teamwork,
+            self.communication, self.leadership,
+        ]
+        return round(sum(scores) / len(scores), 1)
+
+    @property
+    def rating_label(self):
+        rating = self.overall_rating
+        if rating >= 4.5:
+            return 'Outstanding'
+        if rating >= 3.5:
+            return 'Exceeds Expectations'
+        if rating >= 2.5:
+            return 'Meets Expectations'
+        if rating >= 1.5:
+            return 'Needs Improvement'
+        return 'Unsatisfactory'
