@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AttendanceRecord, Department, Employee, LeaveRequest
+from .models import AttendanceRecord, Department, Employee, LeaveRequest, Payslip
 
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
@@ -21,6 +21,13 @@ class EmployeeAdmin(admin.ModelAdmin):
     def full_name_display(self, obj):
         return obj.full_name
     full_name_display.short_description = 'Name'
+
+@admin.register(Payslip)
+class PayslipAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'period_year', 'period_month', 'gross_pay',
+                    'total_deductions', 'net_pay', 'currency')
+    list_filter = ('period_year', 'period_month', 'currency')
+    search_fields = ('employee__first_name', 'employee__last_name', 'employee__employee_id')
 
 @admin.register(AttendanceRecord)
 class AttendanceRecordAdmin(admin.ModelAdmin):

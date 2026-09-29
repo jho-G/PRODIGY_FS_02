@@ -9,11 +9,12 @@ from django.contrib.auth import login, logout
 from django.http import HttpResponse
 from datetime import datetime, timezone as dt_timezone
 
-from .models import AttendanceRecord, Employee, Department, LeaveRequest
+from .models import AttendanceRecord, Employee, Department, LeaveRequest, Payslip
 from .serializers import (
     AttendanceRecordSerializer,
     EmployeeSerializer,
     DepartmentSerializer,
+    PayslipSerializer,
     UserSerializer,
     LoginSerializer,
     LeaveRequestSerializer,
@@ -479,3 +480,123 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 
         summary.sort(key=lambda r: r['employee_name'])
         return Response({'year': year, 'month': month, 'summary': summary})
+
+
+class PayslipViewSet(viewsets.ModelViewSet):
+    """
+    CRUD ViewSet for monthly payslips with bulk payroll generation.
+    """
+    serializer_class = PayslipSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['period_year', 'period_month', 'net_pay', 'generated_at']
+    ordering = ['-period_year', '-period_month']
+
+    def get_queryset(self):
+        queryset = Payslip.objects.select_related(
+            'employee', 'employee__department'
+        ).all()
+
+        employee = self.request.query_params.get('employee')
+        if employee:
+            queryset = queryset.filter(employee_id=employee)
+
+        department = self.request.query_params.get('department')
+        if department:
+            queryset = queryset.filter(employee__department_id=department)
+
+        year = self.request.query_params.get('year')
+        if year:
+            queryset = queryset.filter(period_year=year)
+
+        month = self.request.query_params.get('month')
+        if month:
+            queryset = queryset.filter(period_month=month)
+
+        return queryset
+
+    @action(detail=False, methods=['post'], url_path='generate')
+    def generate(self, request):
+        """Generate (or refresh) payslips for all active employees for a month.
+
+        Basic salary comes from each employee's monthly salary. Existing payslips
+        for the period are recalculated, so allowanes/bonuses/deductions entered
+        manually are overwritten — pass them per-payslip afterwards if needed.
+        """
+        from django.utils import timezone
+
+        today = timezone.now().date()
+        try:
+            year = int(request.data.get('year', today.year))
+            month = int(request.data.get('month', today.month))
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'year and month must be integers.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not 1 <= month <= 12:
+            return Response(
+                {'detail': 'month must be between 1 and 12.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        created_count = 0
+        updated_count = 0
+        for emp in Employee.objects.filter(is_active=True):
+            basic = emp.salary_monthly or (emp.salary or 0) / 12
+            payslip, created = Payslip.objects.update_or_create(
+                employee=emp,
+                period_year=year,
+                period_month=month,
+                defaults={
+                    'basic_salary': basic,
+                    'currency': emp.currency or 'USD',
+                },
+            )
+            created_count += 1 if created else 0
+            updated_count += 0 if created else 1
+        
+        return Response({
+            'detail': f'Payroll generated for {year}-{month:02d}.',
+            'created': created_count,
+            'updated': updated_count,
+            'total': created_count + updated_count,
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        """Aggregate payroll totals for a given period (default: latest year)."""
+        from django.utils import timezone as dj_timezone
+
+        today = dj_timezone.now().date()
+        try:
+            year = int(request.query_params.get('year', today.year))
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'year must be an integer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        month_param = request.query_params.get('month')
+        filters = {'period_year': year}
+        if month_param:
+            try:
+                filters['period_month'] = int(month_param)
+            except (TypeError, ValueError):
+                return Response(
+                    {'detail': 'month must be an integer.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        money_field = DecimalField(max_digits=12, decimal_places=2)
+        agg = Payslip.objects.filter(**filters).aggregate(
+            total_net=Coalesce(Sum('net_pay'), Value(0), output_field=money_field),
+            total_gross=Coalesce(
+                Sum('basic_salary') + Sum('allowances') + Sum('bonus'),
+                Value(0), output_field=money_field,
+            ),
+            total_tax=Coalesce(Sum('tax_deduction'), Value(0), output_field=money_field),
+            payslip_count=Count('id'),
+        )
+
+        return Response({'year': year, **agg})

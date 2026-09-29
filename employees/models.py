@@ -218,3 +218,65 @@ class AttendanceRecord(models.Model):
             - datetime.combine(date.min, self.check_in)
         )
         return round(max(delta.total_seconds() / 3600, 0), 2)
+
+
+class Payslip(models.Model):
+    """
+    Monthly payroll record for an employee. Amounts are stored so historical
+    payslips stay stable even if the employee's salary changes later.
+    """
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name='payslips'
+    )
+    period_year = models.PositiveIntegerField()
+    period_month = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)])
+
+    basic_salary = models.DecimalField(max_digits=10, decimal_places=2)
+    allowances = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)],
+        help_text="Transport, housing, and other allowances",
+    )
+    bonus = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)],
+    )
+    tax_deduction = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)],
+    )
+    other_deductions = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)],
+        help_text="Loans, advances, and other deductions",
+    )
+    net_pay = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)],
+        help_text="Gross (basic + allowances + bonus) minus deductions",
+    )
+    currency = models.CharField(max_length=3, default='USD')
+    notes = models.CharField(max_length=255, blank=True)
+    generated_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-period_year', '-period_month']
+        unique_together = ('employee', 'period_year', 'period_month')
+
+    def save(self, *args, **kwargs):
+        # Derive net pay server-side so clients can't send inconsistent totals
+        gross = (self.basic_salary or 0) + (self.allowances or 0) + (self.bonus or 0)
+        self.net_pay = (gross - (self.tax_deduction or 0) - (self.other_deductions or 0))
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.employee} - {self.period_year}-{self.period_month:02d}"
+
+    @property
+    def gross_pay(self):
+        return (self.basic_salary or 0) + (self.allowances or 0) + (self.bonus or 0)
+
+    @property
+    def total_deductions(self):
+        return (self.tax_deduction or 0) + (self.other_deductions or 0)
+
+    @property
+    def period_label(self):
+        import calendar
+        return f"{calendar.month_name[self.period_month]} {self.period_year}"

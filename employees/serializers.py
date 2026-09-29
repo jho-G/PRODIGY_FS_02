@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
-from .models import AttendanceRecord, Department, Employee, LeaveRequest
+from .models import AttendanceRecord, Department, Employee, LeaveRequest, Payslip
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -206,3 +206,42 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
                 {'check_out': 'Check-out must be after check-in.'}
             )
         return attrs
+
+
+class PayslipSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    employee_id_code = serializers.CharField(source='employee.employee_id', read_only=True)
+    department_name = serializers.CharField(source='employee.department.name', read_only=True)
+    position = serializers.CharField(source='employee.position', read_only=True)
+    gross_pay = serializers.ReadOnlyField()
+    total_deductions = serializers.ReadOnlyField()
+    period_label = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Payslip
+        fields = [
+            'id',
+            'employee',
+            'employee_name',
+            'employee_id_code',
+            'department_name',
+            'position',
+            'period_year',
+            'period_month',
+            'period_label',
+            'basic_salary',
+            'allowances',
+            'bonus',
+            'tax_deduction',
+            'other_deductions',
+            'gross_pay',
+            'total_deductions',
+            'net_pay',
+            'currency',
+            'notes',
+            'generated_at',
+        ]
+        read_only_fields = [
+            'id', 'gross_pay', 'total_deductions', 'net_pay',
+            'generated_at',
+        ]
