@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     DepartmentViewSet,
     EmployeeViewSet,
+    LeaveRequestViewSet,
     LoginAPIView,
     LogoutAPIView,
     CurrentUserAPIView,
@@ -11,6 +12,7 @@ from .views import (
 router = DefaultRouter()
 router.register(r'departments', DepartmentViewSet, basename='department')
 router.register(r'employees', EmployeeViewSet, basename='employee')
+router.register(r'leaves', LeaveRequestViewSet, basename='leave')
 
 urlpatterns = [
     # Authentication endpoints

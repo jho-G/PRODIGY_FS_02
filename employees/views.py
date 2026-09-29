@@ -3,15 +3,19 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.authtoken.models import Token
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum, Avg, Max, F, Value, DecimalField
+from django.db.models.functions import Coalesce
 from django.contrib.auth import login, logout
+from django.http import HttpResponse
+from datetime import datetime, timezone as dt_timezone
 
-from .models import Employee, Department
+from .models import Employee, Department, LeaveRequest
 from .serializers import (
     EmployeeSerializer,
     DepartmentSerializer,
     UserSerializer,
     LoginSerializer,
+    LeaveRequestSerializer,
 )
 
 
@@ -74,41 +78,84 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     ordering_fields = ['name', 'id']
 
 
+def _filtered_employees(request):
+    """Shared employee queryset filtering for list + export endpoints."""
+    queryset = Employee.objects.select_related('department', 'created_by').all()
+
+    department = request.query_params.get('department')
+    if department:
+        queryset = queryset.filter(department_id=department)
+
+    employment_status = request.query_params.get('employment_status')
+    if employment_status:
+        queryset = queryset.filter(employment_status=employment_status)
+
+    # Salary range filters
+    min_salary = request.query_params.get('min_salary')
+    if min_salary:
+        queryset = queryset.filter(salary__gte=min_salary)
+    max_salary = request.query_params.get('max_salary')
+    if max_salary:
+        queryset = queryset.filter(salary__lte=max_salary)
+
+    # Experience filters (effective = prior + service)
+    min_experience = request.query_params.get('min_experience')
+    if min_experience:
+        try:
+            years = int(min_experience)
+            today = datetime.now().date()
+            cutoff = today.replace(year=today.year - years)
+            queryset = queryset.filter(hire_date__lte=cutoff)
+        except (ValueError, TypeError):
+            pass
+
+    search = request.query_params.get('search')
+    if search:
+        queryset = queryset.filter(
+            Q(first_name__icontains=search)
+            | Q(last_name__icontains=search)
+            | Q(employee_id__icontains=search)
+            | Q(email__icontains=search)
+            | Q(position__icontains=search)
+        )
+
+    show_all = request.query_params.get('all', '').lower() == 'true'
+    is_active_param = request.query_params.get('is_active')
+
+    if not show_all:
+        if is_active_param is not None:
+            queryset = queryset.filter(is_active=is_active_param.lower() == 'true')
+        else:
+            queryset = queryset.filter(is_active=True)
+
+    ordering = request.query_params.get('ordering')
+    allowed_orderings = {
+        'salary', '-salary', 'salary_monthly', '-salary_monthly',
+        'hire_date', '-hire_date', 'created_at', '-created_at',
+        'first_name', '-first_name', 'last_name', '-last_name',
+        'employee_id', '-employee_id',
+    }
+    if ordering in allowed_orderings:
+        queryset = queryset.order_by(ordering)
+    else:
+        queryset = queryset.order_by('-created_at')
+
+    return queryset
+
+
 class EmployeeViewSet(viewsets.ModelViewSet):
     """
-    CRUD ViewSet for Employees with search, filtering, soft-delete, and statistics.
+    CRUD ViewSet for Employees with search, filtering, soft-delete, statistics,
+    payroll metrics, and CSV export.
     """
     serializer_class = EmployeeSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['first_name', 'last_name', 'employee_id', 'email', 'position']
+    filter_backends = [filters.OrderingFilter]
     ordering_fields = ['first_name', 'last_name', 'hire_date', 'salary', 'created_at', 'employee_id']
     ordering = ['-created_at']
 
     def get_queryset(self):
-        queryset = Employee.objects.select_related('department', 'created_by').all()
-
-        # Department filter
-        department = self.request.query_params.get('department')
-        if department:
-            queryset = queryset.filter(department_id=department)
-
-        # Employment status filter
-        employment_status = self.request.query_params.get('employment_status')
-        if employment_status:
-            queryset = queryset.filter(employment_status=employment_status)
-
-        # Active status filter (defaults to active employees only unless specified)
-        show_all = self.request.query_params.get('all', '').lower() == 'true'
-        is_active_param = self.request.query_params.get('is_active')
-
-        if not show_all:
-            if is_active_param is not None:
-                queryset = queryset.filter(is_active=is_active_param.lower() == 'true')
-            else:
-                queryset = queryset.filter(is_active=True)
-
-        return queryset
+        return _filtered_employees(self.request)
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -133,27 +180,93 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             'employee': EmployeeSerializer(employee).data,
         }, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['get'], url_path='export')
+    def export(self, request):
+        """Export the current (filtered) employee directory as a CSV file."""
+        import csv
+
+        employees = _filtered_employees(request).order_by('employee_id')
+
+        response = HttpResponse(content_type='text/csv')
+        filename = f"employees_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        writer = csv.writer(response)
+        header = [
+            'Employee ID', 'First Name', 'Last Name', 'Email', 'Phone',
+            'Department', 'Position', 'Employment Status',
+            'Annual Salary', 'Monthly Salary', 'Currency',
+            'Total Experience (years)', 'Years of Service',
+            'Hire Date', 'Annual Leave Days', 'Active',
+        ]
+        writer.writerow(header)
+
+        for emp in employees:
+            writer.writerow([
+                emp.employee_id,
+                emp.first_name,
+                emp.last_name,
+                emp.email,
+                emp.phone_number,
+                emp.department.name if emp.department else '',
+                emp.position,
+                emp.get_employment_status_display(),
+                emp.salary,
+                emp.salary_monthly,
+                emp.currency,
+                emp.effective_experience_years,
+                emp.years_of_service,
+                emp.hire_date,
+                emp.annual_leave_days,
+                'Yes' if emp.is_active else 'No',
+            ])
+
+        return response
+
     @action(detail=False, methods=['get'])
     def stats(self, request):
         """Aggregate statistical metrics for dashboard presentation."""
+        money_field = DecimalField(max_digits=12, decimal_places=2)
+
         total_employees = Employee.objects.count()
-        active_employees = Employee.objects.filter(is_active=True).count()
+        active_qs = Employee.objects.filter(is_active=True)
+        active_employees = active_qs.count()
         inactive_employees = total_employees - active_employees
         departments_count = Department.objects.count()
 
-        # Breakdown by department
+        payroll_agg = active_qs.aggregate(
+            total_monthly=Coalesce(Sum('salary_monthly'), Value(0), output_field=money_field),
+            total_annual=Coalesce(Sum('salary'), Value(0), output_field=money_field),
+            avg_monthly=Coalesce(Avg('salary_monthly'), Value(0), output_field=money_field),
+            max_monthly=Coalesce(Max('salary_monthly'), Value(0), output_field=money_field),
+        )
+        highest_paid = (
+            active_qs.order_by('-salary_monthly').first()
+        )
+        avg_service = 0
+        for emp in active_qs:
+            avg_service += emp.years_of_service
+        if active_employees:
+            avg_service = round(avg_service / active_employees, 1)
+
+        # Breakdown by department (headcount + payroll)
         dept_breakdown = (
             Department.objects.annotate(
-                active_count=Count('employee', filter=Q(employee__is_active=True))
-            ).values('id', 'name', 'active_count')
+                active_count=Count('employee', filter=Q(employee__is_active=True)),
+                monthly_payroll=Coalesce(
+                    Sum('employee__salary_monthly',
+                        filter=Q(employee__is_active=True)),
+                    Value(0), output_field=money_field,
+                ),
+            ).values('id', 'name', 'active_count', 'monthly_payroll')
         )
 
         # Breakdown by employment status
         status_breakdown = {
-            'FT': Employee.objects.filter(is_active=True, employment_status='FT').count(),
-            'PT': Employee.objects.filter(is_active=True, employment_status='PT').count(),
-            'CT': Employee.objects.filter(is_active=True, employment_status='CT').count(),
-            'IN': Employee.objects.filter(is_active=True, employment_status='IN').count(),
+            'FT': active_qs.filter(employment_status='FT').count(),
+            'PT': active_qs.filter(employment_status='PT').count(),
+            'CT': active_qs.filter(employment_status='CT').count(),
+            'IN': active_qs.filter(employment_status='IN').count(),
         }
 
         return Response({
@@ -161,6 +274,91 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             'active_employees': active_employees,
             'inactive_employees': inactive_employees,
             'departments_count': departments_count,
+            'total_monthly_payroll': float(payroll_agg['total_monthly'] or 0),
+            'total_annual_payroll': float(payroll_agg['total_annual'] or 0),
+            'average_monthly_salary': float(payroll_agg['avg_monthly'] or 0),
+            'highest_paid_employee': {
+                'name': highest_paid.full_name if highest_paid else None,
+                'position': highest_paid.position if highest_paid else None,
+                'monthly_salary': float(highest_paid.salary_monthly) if highest_paid else 0,
+            },
+            'average_years_of_service': avg_service,
             'department_breakdown': list(dept_breakdown),
             'status_breakdown': status_breakdown,
         }, status=status.HTTP_200_OK)
+
+
+class LeaveRequestViewSet(viewsets.ModelViewSet):
+    """
+    CRUD ViewSet for employee leave requests with approval workflow.
+    """
+    serializer_class = LeaveRequestSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = [
+        'employee__first_name', 'employee__last_name',
+        'employee__employee_id', 'reason',
+    ]
+    ordering_fields = ['start_date', 'end_date', 'created_at', 'status']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        queryset = LeaveRequest.objects.select_related(
+            'employee', 'employee__department', 'reviewed_by'
+        ).all()
+
+        employee = self.request.query_params.get('employee')
+        if employee:
+            queryset = queryset.filter(employee_id=employee)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param.upper())
+
+        leave_type = self.request.query_params.get('leave_type')
+        if leave_type:
+            queryset = queryset.filter(leave_type=leave_type)
+
+        return queryset
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """Approve a pending leave request."""
+        leave = self.get_object()
+        if leave.status != 'PENDING':
+            return Response(
+                {'detail': f'Only pending requests can be approved (current: {leave.status}).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        leave.status = 'APPROVED'
+        leave.reviewed_by = request.user
+        leave.save(update_fields=['status', 'reviewed_by', 'updated_at'])
+        return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """Reject a pending leave request."""
+        leave = self.get_object()
+        if leave.status != 'PENDING':
+            return Response(
+                {'detail': f'Only pending requests can be rejected (current: {leave.status}).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        leave.status = 'REJECTED'
+        leave.reviewed_by = request.user
+        leave.save(update_fields=['status', 'reviewed_by', 'updated_at'])
+        return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """Cancel an approved leave request."""
+        leave = self.get_object()
+        if leave.status != 'APPROVED':
+            return Response(
+                {'detail': f'Only approved requests can be cancelled (current: {leave.status}).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        leave.status = 'CANCELLED'
+        leave.reviewed_by = request.user
+        leave.save(update_fields=['status', 'reviewed_by', 'updated_at'])
+        return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
