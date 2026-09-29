@@ -17,6 +17,7 @@ from employees.models import (
     Department,
     Employee,
     LeaveRequest,
+    PerformanceReview,
     Payslip,
 )
 
@@ -80,8 +81,8 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--count', type=int, default=40,
-            help='Number of employees to create (default: 40).',
+            '--count', type=int, default=60,
+            help='Number of employees to create (default: 60).',
         )
         parser.add_argument(
             '--force', action='store_true',
@@ -311,8 +312,64 @@ class Command(BaseCommand):
 
         Payslip.objects.bulk_create(payslips, batch_size=100, ignore_conflicts=True)
 
+        # --- Performance reviews ------------------------------------------
+        # Roughly 60% of the workforce gets one or two reviews across the
+        # last two review periods; most completed, some still drafts.
+        review_periods = ['2025 Annual', '2026-Q2']
+        strengths_pool = [
+            'Consistently delivers high-quality work ahead of schedule.',
+            'Excellent collaboration across teams.',
+            'Strong problem-solving and ownership of complex tasks.',
+            'Great mentor to junior team members.',
+            'Communicates clearly with stakeholders.',
+        ]
+        improvements_pool = [
+            'Could delegate more effectively.',
+            'Time estimation on large tasks needs refinement.',
+            'Should increase exposure to cross-department projects.',
+            'Documentation habits could be more consistent.',
+            'Would benefit from more proactive stakeholder updates.',
+        ]
+        goals_pool = [
+            'Lead at least one cross-team initiative next quarter.',
+            'Complete an advanced certification in their field.',
+            'Improve delivery predictability to above 90%.',
+            'Mentor two junior colleagues this year.',
+            'Reduce recurring incident turnaround time.',
+        ]
+
+        performance_reviews = []
+        reviewed_employees = random.sample(
+            active_employees, k=max(1, int(len(active_employees) * 0.6))
+        )
+        for emp in reviewed_employees:
+            for period in random.sample(
+                review_periods, k=random.randint(1, len(review_periods))
+            ):
+                status = random.choices(
+                    ['DRAFT', 'COMPLETED', 'ACKNOWLEDGED'], weights=[20, 50, 30]
+                )[0]
+                performance_reviews.append(PerformanceReview(
+                    employee=emp,
+                    reviewer=admin_user,
+                    review_period=period,
+                    review_date=today - timedelta(days=random.randint(10, 240)),
+                    productivity=random.randint(2, 5),
+                    quality=random.randint(2, 5),
+                    teamwork=random.randint(2, 5),
+                    communication=random.randint(2, 5),
+                    leadership=random.randint(2, 5),
+                    strengths=random.choice(strengths_pool),
+                    areas_for_improvement=random.choice(improvements_pool),
+                    goals=random.choice(goals_pool),
+                    status=status,
+                ))
+
+        PerformanceReview.objects.bulk_create(performance_reviews, batch_size=100)
+
         self.stdout.write(self.style.SUCCESS(
             f'Seeded {len(departments)} departments, {len(employees)} employees, '
             f'{len(leave_requests)} leave requests, {len(attendance_records)} '
-            f'attendance records, and {len(payslips)} payslips.'
+            f'attendance records, {len(payslips)} payslips, and '
+            f'{len(performance_reviews)} performance reviews.'
         ))
