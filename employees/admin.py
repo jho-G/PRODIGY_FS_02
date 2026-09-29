@@ -1,5 +1,12 @@
 from django.contrib import admin
-from .models import AttendanceRecord, Department, Employee, LeaveRequest, Payslip
+from .models import (
+    AttendanceRecord,
+    Department,
+    Employee,
+    LeaveRequest,
+    Payslip,
+    PerformanceReview,
+)
 
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
@@ -41,3 +48,13 @@ class LeaveRequestAdmin(admin.ModelAdmin):
                     'days_count', 'status', 'reviewed_by')
     list_filter = ('status', 'leave_type')
     search_fields = ('employee__first_name', 'employee__last_name', 'employee__employee_id')
+
+@admin.register(PerformanceReview)
+class PerformanceReviewAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'review_period', 'review_date', 'overall_rating',
+                    'rating_label', 'status', 'reviewer')
+    list_filter = ('status', 'review_period', 'review_date')
+    search_fields = ('employee__first_name', 'employee__last_name',
+                     'employee__employee_id', 'review_period', 'strengths',
+                     'areas_for_improvement', 'goals')
+    readonly_fields = ('overall_rating', 'rating_label')
