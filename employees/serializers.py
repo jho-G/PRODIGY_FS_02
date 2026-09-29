@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
-from .models import Department, Employee, LeaveRequest
+from .models import AttendanceRecord, Department, Employee, LeaveRequest
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -167,5 +167,42 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         if start and end and end < start:
             raise serializers.ValidationError(
                 {'end_date': 'End date cannot be before the start date.'}
+            )
+        return attrs
+
+
+class AttendanceRecordSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    employee_id_code = serializers.CharField(source='employee.employee_id', read_only=True)
+    work_hours = serializers.ReadOnlyField()
+
+    class Meta:
+        model = AttendanceRecord
+        fields = [
+            'id',
+            'employee',
+            'employee_name',
+            'employee_id_code',
+            'date',
+            'status',
+            'check_in',
+            'check_out',
+            'work_hours',
+            'notes',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'work_hours', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        check_in = attrs.get('check_in')
+        check_out = attrs.get('check_out')
+        instance = getattr(self, 'instance', None)
+        if instance:
+            check_in = check_in or instance.check_in
+            check_out = check_out or instance.check_out
+        if check_in and check_out and check_out <= check_in:
+            raise serializers.ValidationError(
+                {'check_out': 'Check-out must be after check-in.'}
             )
         return attrs

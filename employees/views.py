@@ -9,8 +9,9 @@ from django.contrib.auth import login, logout
 from django.http import HttpResponse
 from datetime import datetime, timezone as dt_timezone
 
-from .models import Employee, Department, LeaveRequest
+from .models import AttendanceRecord, Employee, Department, LeaveRequest
 from .serializers import (
+    AttendanceRecordSerializer,
     EmployeeSerializer,
     DepartmentSerializer,
     UserSerializer,
@@ -362,3 +363,119 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         leave.reviewed_by = request.user
         leave.save(update_fields=['status', 'reviewed_by', 'updated_at'])
         return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
+
+
+class AttendanceViewSet(viewsets.ModelViewSet):
+    """
+    CRUD ViewSet for daily attendance records with check-in/out actions.
+    """
+    serializer_class = AttendanceRecordSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['date', 'status', 'check_in']
+    ordering = ['-date']
+
+    def get_queryset(self):
+        queryset = AttendanceRecord.objects.select_related('employee').all()
+
+        employee = self.request.query_params.get('employee')
+        if employee:
+            queryset = queryset.filter(employee_id=employee)
+
+        date_param = self.request.query_params.get('date')
+        if date_param:
+            queryset = queryset.filter(date=date_param)
+
+        date_after = self.request.query_params.get('date_after')
+        if date_after:
+            queryset = queryset.filter(date__gte=date_after)
+
+        date_before = self.request.query_params.get('date_before')
+        if date_before:
+            queryset = queryset.filter(date__lte=date_before)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param.upper())
+
+        return queryset
+
+    @action(detail=True, methods=['post'])
+    def check_in(self, request, pk=None):
+        """Record a check-in time for an attendance record."""
+        record = self.get_object()
+        if record.check_in:
+            return Response(
+                {'detail': 'Check-in already recorded for this date.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        record.check_in = datetime.now().time()
+        record.save()
+        return Response(AttendanceRecordSerializer(record).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def check_out(self, request, pk=None):
+        """Record a check-out time for an attendance record."""
+        record = self.get_object()
+        if not record.check_in:
+            return Response(
+                {'detail': 'Cannot check out before checking in.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if record.check_out:
+            return Response(
+                {'detail': 'Check-out already recorded for this date.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        record.check_out = datetime.now().time()
+        record.save()
+        return Response(AttendanceRecordSerializer(record).data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='summary')
+    def summary(self, request):
+        """Per-employee attendance counts for a given month (default: current)."""
+        today = datetime.now().date()
+        try:
+            year = int(request.query_params.get('year', today.year))
+            month = int(request.query_params.get('month', today.month))
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'year and month must be integers.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        records = AttendanceRecord.objects.filter(
+            date__year=year, date__month=month
+        ).values('employee_id').annotate(
+            present=Count('id', filter=Q(status='PRESENT')),
+            late=Count('id', filter=Q(status='LATE')),
+            absent=Count('id', filter=Q(status='ABSENT')),
+            on_leave=Count('id', filter=Q(status='LEAVE')),
+            remote=Count('id', filter=Q(status='REMOTE')),
+            total_days=Count('id'),
+        )
+
+        employee_ids = [r['employee_id'] for r in records]
+        employees = {
+            e.id: e for e in Employee.objects.filter(id__in=employee_ids)
+        }
+
+        summary = []
+        for row in records:
+            emp = employees.get(row['employee_id'])
+            if not emp:
+                continue
+            summary.append({
+                'employee': emp.id,
+                'employee_name': emp.full_name,
+                'employee_id_code': emp.employee_id,
+                'present': row['present'],
+                'late': row['late'],
+                'absent': row['absent'],
+                'on_leave': row['on_leave'],
+                'remote': row['remote'],
+                'total_days': row['total_days'],
+            })
+
+        summary.sort(key=lambda r: r['employee_name'])
+        return Response({'year': year, 'month': month, 'summary': summary})

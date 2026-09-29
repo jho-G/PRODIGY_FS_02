@@ -1,7 +1,7 @@
 from django.db import models
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator, EmailValidator
 from django.contrib.auth.models import User
-from datetime import date
+from datetime import date, datetime, time as datetime_time
 from decimal import Decimal
 
 
@@ -163,3 +163,58 @@ class LeaveRequest(models.Model):
             self.status == 'APPROVED'
             and self.start_date <= today <= self.end_date
         )
+
+
+class AttendanceRecord(models.Model):
+    """
+    Daily attendance log per employee with check-in/check-out times.
+    """
+
+    STATUS_CHOICES = [
+        ('PRESENT', 'Present'),
+        ('LATE', 'Late'),
+        ('ABSENT', 'Absent'),
+        ('LEAVE', 'On Leave'),
+        ('REMOTE', 'Remote'),
+    ]
+
+    LATE_CUTOFF = datetime_time(9, 0)  # arrivals after 09:00 count as late
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name='attendance_records'
+    )
+    date = models.DateField(default=date.today)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PRESENT')
+    check_in = models.TimeField(null=True, blank=True)
+    check_out = models.TimeField(null=True, blank=True)
+    notes = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date']
+        unique_together = ('employee', 'date')
+
+    def save(self, *args, **kwargs):
+        # Auto-flag late arrivals when a check-in exists but no explicit status
+        if (
+            self.check_in
+            and self.status == 'PRESENT'
+            and self.check_in > self.LATE_CUTOFF
+        ):
+            self.status = 'LATE'
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.employee} - {self.date} ({self.status})"
+
+    @property
+    def work_hours(self):
+        """Hours worked as a float, from check-in/check-out (None if incomplete)."""
+        if not self.check_in or not self.check_out:
+            return None
+        delta = (
+            datetime.combine(date.min, self.check_out)
+            - datetime.combine(date.min, self.check_in)
+        )
+        return round(max(delta.total_seconds() / 3600, 0), 2)
