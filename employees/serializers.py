@@ -1,7 +1,14 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
-from .models import AttendanceRecord, Department, Employee, LeaveRequest, Payslip
+from .models import (
+    AttendanceRecord,
+    Department,
+    Employee,
+    LeaveRequest,
+    PerformanceReview,
+    Payslip,
+)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -205,6 +212,52 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'check_out': 'Check-out must be after check-in.'}
             )
+        return attrs
+
+
+class PerformanceReviewSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    employee_id_code = serializers.CharField(source='employee.employee_id', read_only=True)
+    department_name = serializers.CharField(source='employee.department.name', read_only=True)
+    position = serializers.CharField(source='employee.position', read_only=True)
+    reviewer_username = serializers.CharField(source='reviewer.username', read_only=True)
+    overall_rating = serializers.ReadOnlyField()
+    rating_label = serializers.ReadOnlyField()
+
+    class Meta:
+        model = PerformanceReview
+        fields = [
+            'id',
+            'employee',
+            'employee_name',
+            'employee_id_code',
+            'department_name',
+            'position',
+            'reviewer',
+            'reviewer_username',
+            'review_period',
+            'review_date',
+            'productivity',
+            'quality',
+            'teamwork',
+            'communication',
+            'leadership',
+            'overall_rating',
+            'rating_label',
+            'strengths',
+            'areas_for_improvement',
+            'goals',
+            'status',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'overall_rating', 'rating_label',
+            'reviewer_username', 'created_at', 'updated_at',
+        ]
+
+    def validate(self, attrs):
+        """Reviewer is set automatically on completion unless provided."""
         return attrs
 
 

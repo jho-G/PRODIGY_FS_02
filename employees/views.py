@@ -9,11 +9,19 @@ from django.contrib.auth import login, logout
 from django.http import HttpResponse
 from datetime import datetime, timezone as dt_timezone
 
-from .models import AttendanceRecord, Employee, Department, LeaveRequest, Payslip
+from .models import (
+    AttendanceRecord,
+    Employee,
+    Department,
+    LeaveRequest,
+    PerformanceReview,
+    Payslip,
+)
 from .serializers import (
     AttendanceRecordSerializer,
     EmployeeSerializer,
     DepartmentSerializer,
+    PerformanceReviewSerializer,
     PayslipSerializer,
     UserSerializer,
     LoginSerializer,
@@ -600,3 +608,153 @@ class PayslipViewSet(viewsets.ModelViewSet):
         )
 
         return Response({'year': year, **agg})
+
+
+class PerformanceReviewViewSet(viewsets.ModelViewSet):
+    """
+    CRUD ViewSet for performance reviews with completion/acknowledgement
+    workflow and aggregate rating analytics.
+    """
+    serializer_class = PerformanceReviewSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = [
+        'employee__first_name', 'employee__last_name',
+        'employee__employee_id', 'review_period',
+        'strengths', 'areas_for_improvement', 'goals',
+    ]
+    ordering_fields = ['review_date', 'review_period', 'status', 'created_at']
+    ordering = ['-review_date']
+
+    def get_queryset(self):
+        queryset = PerformanceReview.objects.select_related(
+            'employee', 'employee__department', 'reviewer'
+        ).all()
+
+        employee = self.request.query_params.get('employee')
+        if employee:
+            queryset = queryset.filter(employee_id=employee)
+
+        department = self.request.query_params.get('department')
+        if department:
+            queryset = queryset.filter(employee__department_id=department)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param.upper())
+
+        period = self.request.query_params.get('review_period')
+        if period:
+            queryset = queryset.filter(review_period__icontains=period)
+
+        return queryset
+
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        """Mark a draft review as completed; records the reviewer."""
+        review = self.get_object()
+        if review.status != 'DRAFT':
+            return Response(
+                {'detail': f'Only draft reviews can be completed (current: {review.status}).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        review.status = 'COMPLETED'
+        review.reviewer = request.user
+        review.save(update_fields=['status', 'reviewer', 'updated_at'])
+        return Response(PerformanceReviewSerializer(review).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def acknowledge(self, request, pk=None):
+        """Employee acknowledgement of a completed review."""
+        review = self.get_object()
+        if review.status != 'COMPLETED':
+            return Response(
+                {'detail': f'Only completed reviews can be acknowledged (current: {review.status}).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        review.status = 'ACKNOWLEDGED'
+        review.save(update_fields=['status', 'updated_at'])
+        return Response(PerformanceReviewSerializer(review).data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        """Aggregate review analytics: averages, distribution, top performers."""
+        reviews = list(
+            PerformanceReview.objects.select_related(
+                'employee', 'employee__department'
+            ).filter(status__in=['COMPLETED', 'ACKNOWLEDGED'])
+        )
+
+        total = len(reviews)
+        if total == 0:
+            return Response({
+                'total_reviews': 0,
+                'average_overall_rating': 0,
+                'distribution': {},
+                'top_performers': [],
+                'department_averages': [],
+            })
+
+        label_order = [
+            'Outstanding', 'Exceeds Expectations', 'Meets Expectations',
+            'Needs Improvement', 'Unsatisfactory',
+        ]
+        distribution = {label: 0 for label in label_order}
+        rating_sum = 0.0
+
+        by_employee = {}
+        by_department = {}
+
+        for review in reviews:
+            rating = review.overall_rating
+            rating_sum += rating
+            distribution[review.rating_label] = distribution.get(review.rating_label, 0) + 1
+
+            emp = review.employee
+            by_employee.setdefault(emp.id, {
+                'employee': emp.id,
+                'employee_name': emp.full_name,
+                'employee_id_code': emp.employee_id,
+                'position': emp.position,
+                'department': emp.department.name if emp.department else None,
+                'ratings': [],
+            })['ratings'].append(rating)
+
+            dept_name = emp.department.name if emp.department else 'Unassigned'
+            by_department.setdefault(dept_name, []).append(rating)
+
+        top_performers = sorted(
+            (
+                {
+                    **data,
+                    'average_rating': round(sum(data['ratings']) / len(data['ratings']), 2),
+                    'review_count': len(data['ratings']),
+                }
+                for data in by_employee.values()
+            ),
+            key=lambda d: d['average_rating'],
+            reverse=True,
+        )[:5]
+        for performer in top_performers:
+            performer.pop('ratings', None)
+
+        department_averages = sorted(
+            (
+                {
+                    'department': dept,
+                    'average_rating': round(sum(ratings) / len(ratings), 2),
+                    'review_count': len(ratings),
+                }
+                for dept, ratings in by_department.items()
+            ),
+            key=lambda d: d['average_rating'],
+            reverse=True,
+        )
+
+        return Response({
+            'total_reviews': total,
+            'average_overall_rating': round(rating_sum / total, 2),
+            'distribution': distribution,
+            'top_performers': top_performers,
+            'department_averages': department_averages,
+        })

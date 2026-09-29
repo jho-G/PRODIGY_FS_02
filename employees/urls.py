@@ -8,6 +8,7 @@ from .views import (
     LoginAPIView,
     LogoutAPIView,
     CurrentUserAPIView,
+    PerformanceReviewViewSet,
     PayslipViewSet,
 )
 
@@ -17,6 +18,7 @@ router.register(r'employees', EmployeeViewSet, basename='employee')
 router.register(r'leaves', LeaveRequestViewSet, basename='leave')
 router.register(r'attendance', AttendanceViewSet, basename='attendance')
 router.register(r'payslips', PayslipViewSet, basename='payslip')
+router.register(r'performance-reviews', PerformanceReviewViewSet, basename='performance-review')
 
 urlpatterns = [
     # Authentication endpoints
