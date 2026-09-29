@@ -2,11 +2,20 @@ from django.db import models
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator, EmailValidator
 from django.contrib.auth.models import User
 from datetime import date
+from decimal import Decimal
+
+
+def _years_between(start, end):
+    """Whole years elapsed between two dates (age-style calculation)."""
+    if start is None or end is None or end < start:
+        return 0
+    return end.year - start.year - ((end.month, end.day) < (start.month, start.day))
+
 
 class Department(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
-    
+
     def __str__(self):
         return self.name
 
@@ -40,14 +49,38 @@ class Employee(models.Model):
     position = models.CharField(max_length=100)
     hire_date = models.DateField(auto_now_add=True)
     employment_status = models.CharField(max_length=2, choices=EMPLOYMENT_STATUS, default='FT')
-    salary = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
-    
+    salary = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)], help_text="Annual gross salary")
+
+    # Compensation details
+    salary_monthly = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Monthly salary (auto-derived from annual salary if not provided)",
+    )
+    bank_account = models.CharField(max_length=34, blank=True)
+    currency = models.CharField(max_length=3, default='USD')
+
+    # Experience
+    total_experience_years = models.PositiveIntegerField(
+        default=0, validators=[MaxValueValidator(60)],
+        help_text="Prior work experience at time of hire (years)",
+    )
+
+    # Leave entitlement
+    annual_leave_days = models.PositiveIntegerField(default=20)
+
     # System Fields
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
     
+    def save(self, *args, **kwargs):
+        # Keep the denormalized monthly salary in sync with the annual salary
+        if self.salary and (not self.salary_monthly or self.salary_monthly == 0):
+            self.salary_monthly = (self.salary / 12).quantize(Decimal('0.01'))
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.employee_id} - {self.first_name} {self.last_name}"
     
@@ -59,3 +92,74 @@ class Employee(models.Model):
     def age(self):
         today = date.today()
         return today.year - self.date_of_birth.year - ((today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day))
+
+    @property
+    def years_of_service(self):
+        """Years worked at the company, derived from hire_date."""
+        return _years_between(self.hire_date, date.today())
+
+    @property
+    def effective_experience_years(self):
+        """Prior experience at hire plus years served in the company."""
+        return self.total_experience_years + self.years_of_service
+
+
+class LeaveRequest(models.Model):
+    """
+    Employee leave/vacation requests with manager approval workflow.
+    """
+
+    LEAVE_TYPES = [
+        ('VL', 'Vacation'),
+        ('SL', 'Sick'),
+        ('PL', 'Personal'),
+        ('ML', 'Maternity/Paternity'),
+        ('UL', 'Unpaid'),
+    ]
+
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name='leave_requests'
+    )
+    leave_type = models.CharField(max_length=2, choices=LEAVE_TYPES, default='VL')
+    start_date = models.DateField()
+    end_date = models.DateField()
+    days_count = models.PositiveIntegerField(editable=False, default=0)
+    reason = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDING')
+    reviewed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reviewed_leave_requests'
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        # Inclusive day count between start and end dates
+        if self.start_date and self.end_date and self.end_date >= self.start_date:
+            delta = self.end_date - self.start_date
+            self.days_count = delta.days + 1
+        else:
+            self.days_count = 0
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.employee} - {self.get_leave_type_display()} ({self.status})"
+
+    @property
+    def is_active_leave(self):
+        today = date.today()
+        return (
+            self.status == 'APPROVED'
+            and self.start_date <= today <= self.end_date
+        )
