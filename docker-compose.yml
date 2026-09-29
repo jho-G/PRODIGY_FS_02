@@ -29,7 +29,11 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-      - "5173:80"
+      - "443:443"
+      - "5173:443"
+    volumes:
+      # Mount SSL certificate and private key securely into Nginx
+      - ./frontend/ssl:/etc/nginx/ssl:ro
     depends_on:
       - backend
     networks:
