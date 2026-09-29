@@ -148,11 +148,25 @@ The API will be accessible at: **`http://127.0.0.1:8000/api/`**
 
 ---
 
-## 🐳 Running with Docker (Backend + Frontend)
+## 🐳 Running with Docker (Recommended)
 
-The entire full-stack system is fully containerized using **Docker** and **Docker Compose**.
+The full-stack Employee Management System is fully containerized using **Docker** and **Docker Compose**, providing a production-ready, zero-configuration setup for both the backend and frontend.
 
-### Start All Services
+### Container Architecture
+
+- **`ems_backend` (Django DRF):** Runs on Python 3.11-slim, auto-applies migrations on startup, persists data via SQLite volume mount, and exposes port `8000`.
+- **`ems_frontend` (React + Nginx):** Uses a multi-stage Docker build (`node:20-alpine` -> `nginx:alpine`). Nginx serves optimized production static assets and reverse-proxies `/api/` and `/admin/` requests to the backend container.
+
+### Prerequisites
+
+- [Docker Engine](https://docs.docker.com/engine/install/) (v20.10+)
+- [Docker Compose](https://docs.docker.com/compose/install/) (v2.0+)
+
+---
+
+### Step-by-Step Instructions
+
+#### 1. Build and Start All Services
 
 From the project root directory, run:
 
@@ -160,22 +174,59 @@ From the project root directory, run:
 docker-compose up --build
 ```
 
-- **React Frontend:** Access at **`http://localhost:5173`** or **`http://localhost`**
-- **Django API Backend:** Access at **`http://localhost:8000/api/`**
-- **Django Admin:** Access at **`http://localhost:8000/admin/`**
+> **Tip:** Add the `-d` flag to run in detached (background) mode:
+> ```bash
+> docker-compose up --build -d
+> ```
 
-### Create Admin / Superuser in Docker
+#### 2. Access the Application
 
-To create an administrative user inside the running backend container:
+Once the build finishes and containers start:
+- 🌐 **React Frontend Application:** [http://localhost:5173](http://localhost:5173) or [http://localhost](http://localhost)
+- 📡 **Django REST API Root:** [http://localhost:8000/api/](http://localhost:8000/api/)
+- ⚙️ **Django Administration Panel:** [http://localhost:8000/admin/](http://localhost:8000/admin/)
+
+---
+
+### Useful Docker Commands
+
+#### Create an Administrative User in Docker
+
+Create a superuser directly inside the running backend container to log in via the React frontend or Django admin:
 
 ```bash
 docker-compose exec backend python manage.py createsuperuser
 ```
 
-### Stop Containers
+#### View Live Container Logs
+
+```bash
+# View logs from all services
+docker-compose logs -f
+
+# View logs from only the backend
+docker-compose logs -f backend
+
+# View logs from only the frontend
+docker-compose logs -f frontend
+```
+
+#### Run Database Migrations Manually
+
+```bash
+docker-compose exec backend python manage.py migrate
+```
+
+#### Stop All Services
 
 ```bash
 docker-compose down
+```
+
+#### Rebuild Services After Code Changes
+
+```bash
+docker-compose up --build
 ```
 
 ---
@@ -218,20 +269,91 @@ Authorization: Token <your_token_key_here>
 |---|---|---|
 | `GET` | `/api/employees/` | List employees (paginated, supports search and filtering). |
 | `POST` | `/api/employees/` | Create a new employee record. |
-| `GET` | `/api/employees/{id}/` | Retrieve employee full profile (includes computed age). |
+| `GET` | `/api/employees/{id}/` | Retrieve employee full profile (includes computed age, service years, and effective experience). |
 | `PUT` / `PATCH` | `/api/employees/{id}/` | Update employee information. |
 | `DELETE` | `/api/employees/{id}/` | Soft delete employee (`is_active=False`). Use `?hard=true` for permanent delete. |
 | `POST` | `/api/employees/{id}/restore/` | Restore a deactivated employee. |
 | `GET` | `/api/employees/stats/` | Retrieve aggregate workforce metrics for dashboard display. |
+| `GET` | `/api/employees/export/` | Download the filtered employee directory as CSV. |
 
 #### Query Parameters for `/api/employees/`
 - `?search=<term>`: Search across `first_name`, `last_name`, `employee_id`, `email`, and `position`.
 - `?department=<id>`: Filter by department ID.
 - `?employment_status=<FT|PT|CT|IN>`: Filter by employment status.
+- `?min_salary=<n>` / `?max_salary=<n>`: Filter by annual salary range.
+- `?min_experience=<years>`: Only employees whose total experience (prior + service) meets the threshold.
 - `?is_active=<true|false>`: Filter by active/inactive state (default: `true`).
 - `?all=true`: Return all records regardless of active status.
-- `?ordering=<field>`: Order results (e.g. `ordering=-created_at`, `ordering=salary`).
+- `?ordering=<field>`: Order results (e.g. `ordering=-created_at`, `ordering=salary`, `ordering=salary_monthly`).
 - `?page=<number>`: Page navigation.
+
+---
+
+### 4. Leave Request Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/leaves/` | List leave requests (filter by `employee`, `status`, `leave_type`). |
+| `POST` | `/api/leaves/` | Submit a new leave request. |
+| `GET` / `PUT` / `PATCH` / `DELETE` | `/api/leaves/{id}/` | Standard leave record operations. |
+| `POST` | `/api/leaves/{id}/approve/` | Approve a pending request (records reviewer). |
+| `POST` | `/api/leaves/{id}/reject/` | Reject a pending request. |
+| `POST` | `/api/leaves/{id}/cancel/` | Cancel an approved request. |
+
+Leave types: `VL` (Vacation), `SL` (Sick), `PL` (Personal), `ML` (Maternity/Paternity), `UL` (Unpaid).
+
+---
+
+### 5. Attendance Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/attendance/` | List attendance records (filter by `employee`, `date`, `date_after`, `date_before`, `status`). |
+| `POST` | `/api/attendance/` | Create a daily attendance record (one per employee/day). |
+| `POST` | `/api/attendance/{id}/check_in/` | Record the check-in time. |
+| `POST` | `/api/attendance/{id}/check_out/` | Record the check-out time. |
+| `GET` | `/api/attendance/summary/?year=&month=` | Per-employee attendance counts for a month. |
+
+Statuses: `PRESENT`, `LATE` (auto-flagged after 09:00 check-in), `ABSENT`, `LEAVE`, `REMOTE`.
+
+---
+
+### 6. Payroll (Payslip) Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/payslips/` | List payslips (filter by `employee`, `department`, `year`, `month`). |
+| `POST` | `/api/payslips/` | Create a single payslip (`net_pay` is derived server-side). |
+| `PUT` / `PATCH` / `DELETE` | `/api/payslips/{id}/` | Standard payslip operations. |
+| `POST` | `/api/payslips/generate/` | Bulk-generate payslips for all active employees for a period (`year`, `month`). |
+| `GET` | `/api/payslips/summary/?year=&month=` | Aggregate gross/net/tax totals for payroll dashboards. |
+
+---
+
+### 7. Performance Review Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/performance-reviews/` | List reviews (filter by `employee`, `department`, `status`, `review_period`). |
+| `POST` | `/api/performance-reviews/` | Create a draft review with 1–5 competency scores. |
+| `PUT` / `PATCH` / `DELETE` | `/api/performance-reviews/{id}/` | Standard review operations. |
+| `POST` | `/api/performance-reviews/{id}/complete/` | Mark a draft as completed (records the reviewer). |
+| `POST` | `/api/performance-reviews/{id}/acknowledge/` | Employee acknowledges a completed review. |
+| `GET` | `/api/performance-reviews/summary/` | Rating distribution, top performers, and department averages. |
+
+---
+
+## 🌱 Mock Data
+
+Populate the database with a realistic mock workforce for development and demos:
+
+```bash
+python manage.py seed_employees            # 60 employees if DB is empty
+python manage.py seed_employees --force    # wipe and reseed
+python manage.py seed_employees --count 100 --force
+```
+
+The seeder creates 7 departments plus employees with randomized names, positions, salaries, prior experience, emergency contacts, and hire dates; ~15 leave requests across the approval workflow; 30 days of attendance records (weekdays only, with late/absent/remote distributions); three months of payslips with variable allowances, bonuses, and deductions; and performance reviews across two review periods.
 
 ---
 
@@ -239,26 +361,32 @@ Authorization: Token <your_token_key_here>
 
 ```text
 PRODIGY_FS_02/
-├── employee_system/          # Project configuration
-│   ├── __init__.py
-│   ├── asgi.py
-│   ├── settings.py           # DRF, CORS, Auth token & Database config
-│   ├── urls.py               # Root URL configuration (/api/ & /admin/)
+├── Dockerfile                  # Django backend Docker container configuration
+├── .dockerignore               # Backend Docker build exclusion rules
+├── docker-compose.yml          # Orchestrates backend & frontend containers
+├── manage.py                   # Django management script
+├── requirements.txt            # Python dependencies (Django, DRF, CORS)
+├── db.sqlite3                  # SQLite database (persisted via Docker volume)
+├── README.md                   # Project documentation
+├── employee_system/            # Django root configuration
+│   ├── settings.py             # DRF, CORS, Auth token & Database config
+│   ├── urls.py                 # Root URL routing (/api/ & /admin/)
 │   └── wsgi.py
-├── employees/                # Employee management API app
-│   ├── admin.py              # Django admin registration
-│   ├── apps.py
-│   ├── models.py             # Department and Employee models
-│   ├── serializers.py        # DRF serializers (Employee, Department, User, Login)
-│   ├── urls.py               # DRF routers and auth endpoint routing
-│   └── views.py              # ViewSets (Employee, Department) and Auth APIViews
-├── manage.py                 # Django management utility
-├── requirements.txt          # Dependencies (Django, DRF, django-cors-headers)
-└── README.md                 # Project documentation
+├── employees/                  # Employee management API app
+│   ├── models.py               # Department, Employee, LeaveRequest, AttendanceRecord, Payslip, PerformanceReview
+│   ├── serializers.py          # DRF serializers for all resources
+│   ├── urls.py                 # DRF DefaultRouter and auth routing
+│   ├── admin.py                # Django admin registrations for all models
+│   ├── management/commands/seed_employees.py  # Mock data seeder
+│   └── views.py                # ViewSets (Employee, Department, Leave, Attendance, Payslip, PerformanceReview) and Auth APIViews
+└── frontend/                   # React Single Page Application (Vite)
+    ├── Dockerfile              # Multi-stage build (Node 20 -> Nginx Alpine)
+    ├── nginx.conf              # Nginx reverse proxy & SPA router config
+    ├── .dockerignore           # Frontend Docker build exclusions
+    ├── package.json            # React, Vite, Axios, React Router, Lucide
+    └── src/
+        ├── api/                # Axios client, interceptors, and endpoints
+        ├── context/            # AuthContext (token & user state management)
+        ├── components/         # ProtectedRoute, Layout, EmployeeModal, EmployeeDetailModal
+        └── pages/              # Login, Dashboard, Employees, Departments, Leave, Attendance, Payroll, Performance
 ```
-
----
-
-## 🔮 Next Phase
-
-In the upcoming phase, the modern **React.js** frontend will be integrated with these endpoints to provide a dynamic Single Page Application (SPA) dashboard.
