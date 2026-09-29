@@ -12,7 +12,13 @@ from datetime import date, time, timedelta
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from employees.models import AttendanceRecord, Department, Employee, LeaveRequest
+from employees.models import (
+    AttendanceRecord,
+    Department,
+    Employee,
+    LeaveRequest,
+    Payslip,
+)
 
 
 FIRST_NAMES = [
@@ -264,8 +270,49 @@ class Command(BaseCommand):
 
         AttendanceRecord.objects.bulk_create(attendance_records, batch_size=100, ignore_conflicts=True)
 
+        # --- Payslips (last 3 completed months) ---------------------------
+        # Basic salary mirrors each employee's monthly salary; allowances,
+        # bonuses, and deductions vary to give payroll pages realistic data.
+        payslips = []
+        today = date.today()
+        months = []
+        year, month = today.year, today.month
+        for _ in range(3):
+            month -= 1
+            if month == 0:
+                month = 12
+                year -= 1
+            months.append((year, month))
+
+        for emp in active_employees:
+            basic = emp.salary_monthly or (emp.salary or 0) / 12
+            for period_year, period_month in months:
+                allowance = round(basic * random.uniform(0.08, 0.15), 2)
+                bonus = (
+                    round(basic * random.uniform(0.03, 0.12), 2)
+                    if random.random() < 0.35 else 0
+                )
+                tax = round(basic * random.uniform(0.10, 0.18), 2)
+                other = (
+                    round(basic * random.uniform(0.01, 0.05), 2)
+                    if random.random() < 0.15 else 0
+                )
+                payslips.append(Payslip(
+                    employee=emp,
+                    period_year=period_year,
+                    period_month=period_month,
+                    basic_salary=basic,
+                    allowances=allowance,
+                    bonus=bonus,
+                    tax_deduction=tax,
+                    other_deductions=other,
+                    currency=emp.currency or 'USD',
+                ))
+
+        Payslip.objects.bulk_create(payslips, batch_size=100, ignore_conflicts=True)
+
         self.stdout.write(self.style.SUCCESS(
             f'Seeded {len(departments)} departments, {len(employees)} employees, '
-            f'{len(leave_requests)} leave requests, and {len(attendance_records)} '
-            f'attendance records.'
+            f'{len(leave_requests)} leave requests, {len(attendance_records)} '
+            f'attendance records, and {len(payslips)} payslips.'
         ))
