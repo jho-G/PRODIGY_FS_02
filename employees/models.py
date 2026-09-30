@@ -89,7 +89,9 @@ class Employee(models.Model):
     def save(self, *args, **kwargs):
         # Keep the denormalized monthly salary in sync with the annual salary
         if self.salary and (not self.salary_monthly or self.salary_monthly == 0):
-            self.salary_monthly = (self.salary / 12).quantize(Decimal('0.01'))
+            # Coerce to Decimal first: salary may arrive as float/int from JSON
+            annual = self.salary if isinstance(self.salary, Decimal) else Decimal(str(self.salary))
+            self.salary_monthly = (annual / 12).quantize(Decimal('0.01'))
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -271,9 +273,14 @@ class Payslip(models.Model):
         unique_together = ('employee', 'period_year', 'period_month')
 
     def save(self, *args, **kwargs):
-        # Derive net pay server-side so clients can't send inconsistent totals
-        gross = (self.basic_salary or 0) + (self.allowances or 0) + (self.bonus or 0)
-        self.net_pay = (gross - (self.tax_deduction or 0) - (self.other_deductions or 0))
+        # Derive net pay server-side so clients can't send inconsistent totals.
+        # Coerce to Decimal first: in-memory attrs may hold raw ints/floats,
+        # which would leave net_pay as an int and lose cent-level precision.
+        def _dec(value):
+            return value if isinstance(value, Decimal) else Decimal(str(value or 0))
+        gross = _dec(self.basic_salary) + _dec(self.allowances) + _dec(self.bonus)
+        deductions = _dec(self.tax_deduction) + _dec(self.other_deductions)
+        self.net_pay = (gross - deductions).quantize(Decimal('0.01'))
         super().save(*args, **kwargs)
 
     def __str__(self):
