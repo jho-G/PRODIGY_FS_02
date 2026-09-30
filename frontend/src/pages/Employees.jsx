@@ -12,9 +12,12 @@ import {
   ChevronRight,
   CheckCircle,
   AlertTriangle,
+  Download,
+  Eye,
 } from 'lucide-react';
 import { employeeApi, departmentApi } from '../api';
 import EmployeeModal from '../components/EmployeeModal';
+import EmployeeDetailModal from '../components/EmployeeDetailModal';
 import './Employees.css';
 
 export default function Employees() {
@@ -30,10 +33,15 @@ export default function Employees() {
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [activeFilter, setActiveFilter] = useState('true'); // 'true', 'false', 'all'
+  const [minExperience, setMinExperience] = useState('');
+  const [minSalary, setMinSalary] = useState('');
+  const [maxSalary, setMaxSalary] = useState('');
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
+  const [detailEmployee, setDetailEmployee] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   // Toast Feedback State
   const [toast, setToast] = useState(null);
@@ -83,6 +91,15 @@ export default function Employees() {
       if (selectedStatus) {
         params.employment_status = selectedStatus;
       }
+      if (minExperience) {
+        params.min_experience = minExperience;
+      }
+      if (minSalary) {
+        params.min_salary = minSalary;
+      }
+      if (maxSalary) {
+        params.max_salary = maxSalary;
+      }
       if (activeFilter === 'all') {
         params.all = 'true';
       } else {
@@ -106,7 +123,7 @@ export default function Employees() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, selectedDept, selectedStatus, activeFilter]);
+  }, [page, debouncedSearch, selectedDept, selectedStatus, activeFilter, minExperience, minSalary, maxSalary]);
 
   useEffect(() => {
     fetchEmployees();
@@ -126,6 +143,51 @@ export default function Employees() {
   const handleActiveFilterChange = (e) => {
     setActiveFilter(e.target.value);
     setPage(1);
+  };
+
+  const handleExperienceChange = (e) => {
+    setMinExperience(e.target.value);
+    setPage(1);
+  };
+
+  const handleSalaryFilterChange = (setter) => (e) => {
+    setter(e.target.value);
+    setPage(1);
+  };
+
+  // Download the currently filtered directory as CSV
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const params = {};
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+      if (selectedDept) params.department = selectedDept;
+      if (selectedStatus) params.employment_status = selectedStatus;
+      if (minExperience) params.min_experience = minExperience;
+      if (minSalary) params.min_salary = minSalary;
+      if (maxSalary) params.max_salary = maxSalary;
+      if (activeFilter === 'all') {
+        params.all = 'true';
+      } else {
+        params.is_active = activeFilter;
+      }
+
+      const blob = await employeeApi.exportCsv(params);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `employees_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showToast('Employee directory exported as CSV.');
+    } catch (err) {
+      console.error('CSV export failed:', err);
+      showToast('Failed to export employee data.', 'error');
+    } finally {
+      setExporting(false);
+    }
   };
 
   // Actions
@@ -238,10 +300,16 @@ export default function Employees() {
           <h1>Employee Directory</h1>
           <p>Search, filter, manage profiles, and maintain workforce records.</p>
         </div>
-        <button onClick={handleOpenAddModal} className="btn btn-primary">
-          <Plus size={18} />
-          <span>Add Employee</span>
-        </button>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button onClick={handleExport} className="btn btn-secondary" disabled={exporting}>
+            {exporting ? <span className="spinner" style={{ width: 16, height: 16 }} /> : <Download size={18} />}
+            <span>{exporting ? 'Exporting...' : 'Export CSV'}</span>
+          </button>
+          <button onClick={handleOpenAddModal} className="btn btn-primary">
+            <Plus size={18} />
+            <span>Add Employee</span>
+          </button>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -299,6 +367,41 @@ export default function Employees() {
 
           <select
             className="filter-select"
+            value={minExperience}
+            onChange={handleExperienceChange}
+            title="Minimum years of experience"
+          >
+            <option value="">Any Experience</option>
+            <option value="1">1+ years experience</option>
+            <option value="3">3+ years experience</option>
+            <option value="5">5+ years experience</option>
+            <option value="10">10+ years experience</option>
+          </select>
+
+          <input
+            type="number"
+            className="filter-select"
+            style={{ minWidth: '130px' }}
+            placeholder="Min salary"
+            min="0"
+            value={minSalary}
+            onChange={handleSalaryFilterChange(setMinSalary)}
+            title="Minimum annual salary"
+          />
+
+          <input
+            type="number"
+            className="filter-select"
+            style={{ minWidth: '130px' }}
+            placeholder="Max salary"
+            min="0"
+            value={maxSalary}
+            onChange={handleSalaryFilterChange(setMaxSalary)}
+            title="Maximum annual salary"
+          />
+
+          <select
+            className="filter-select"
             value={activeFilter}
             onChange={handleActiveFilterChange}
           >
@@ -320,6 +423,8 @@ export default function Employees() {
                 <th>Department</th>
                 <th>Position</th>
                 <th>Status</th>
+                <th>Experience</th>
+                <th>Monthly Salary</th>
                 <th>Annual Salary</th>
                 <th>State</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
@@ -328,14 +433,14 @@ export default function Employees() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="8" style={{ textAlign: 'center', padding: '36px' }}>
+                  <td colSpan="10" style={{ textAlign: 'center', padding: '36px' }}>
                     <div className="spinner-primary" style={{ margin: '0 auto 12px' }} />
                     <p>Loading employee records...</p>
                   </td>
                 </tr>
               ) : employees.length === 0 ? (
                 <tr>
-                  <td colSpan="8">
+                  <td colSpan="10">
                     <div className="empty-table-state">
                       <Users size={40} style={{ opacity: 0.4 }} />
                       <p>No employees match your search or filter criteria.</p>
@@ -345,6 +450,9 @@ export default function Employees() {
                           setSelectedDept('');
                           setSelectedStatus('');
                           setActiveFilter('true');
+                          setMinExperience('');
+                          setMinSalary('');
+                          setMaxSalary('');
                         }}
                         className="btn btn-secondary btn-sm"
                       >
@@ -375,6 +483,16 @@ export default function Employees() {
                       <td>{emp.department_name || <span style={{ color: 'var(--text-muted)' }}>None</span>}</td>
                       <td>{emp.position}</td>
                       <td>{getStatusBadge(emp.employment_status)}</td>
+                      <td>
+                        <span style={{ whiteSpace: 'nowrap' }}>
+                          {emp.effective_experience_years ?? 0} yrs
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          ${(parseFloat(emp.monthly_salary ?? emp.salary_monthly) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </td>
                       <td>${parseFloat(emp.salary || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td>
                         {emp.is_active ? (
@@ -385,6 +503,13 @@ export default function Employees() {
                       </td>
                       <td>
                         <div className="table-actions">
+                          <button
+                            onClick={() => setDetailEmployee(emp)}
+                            className="action-icon-btn"
+                            title="View employee profile"
+                          >
+                            <Eye size={15} />
+                          </button>
                           <button
                             onClick={() => handleOpenEditModal(emp)}
                             className="action-icon-btn"
@@ -467,6 +592,14 @@ export default function Employees() {
         onSuccess={handleModalSuccess}
         employee={editingEmployee}
       />
+
+      {/* Employee Detail Modal */}
+      {detailEmployee && (
+        <EmployeeDetailModal
+          employee={detailEmployee}
+          onClose={() => setDetailEmployee(null)}
+        />
+      )}
     </div>
   );
 }

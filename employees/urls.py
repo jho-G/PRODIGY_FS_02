@@ -1,16 +1,24 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
+    AttendanceViewSet,
     DepartmentViewSet,
     EmployeeViewSet,
+    LeaveRequestViewSet,
     LoginAPIView,
     LogoutAPIView,
     CurrentUserAPIView,
+    PerformanceReviewViewSet,
+    PayslipViewSet,
 )
 
 router = DefaultRouter()
 router.register(r'departments', DepartmentViewSet, basename='department')
 router.register(r'employees', EmployeeViewSet, basename='employee')
+router.register(r'leaves', LeaveRequestViewSet, basename='leave')
+router.register(r'attendance', AttendanceViewSet, basename='attendance')
+router.register(r'payslips', PayslipViewSet, basename='payslip')
+router.register(r'performance-reviews', PerformanceReviewViewSet, basename='performance-review')
 
 urlpatterns = [
     # Authentication endpoints

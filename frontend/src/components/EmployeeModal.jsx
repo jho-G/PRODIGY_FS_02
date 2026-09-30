@@ -19,6 +19,7 @@ export default function EmployeeModal({ isOpen, onClose, onSuccess, employee = n
     position: '',
     employment_status: 'FT',
     salary: '',
+    total_experience_years: '',
   });
 
   const [departments, setDepartments] = useState([]);
@@ -63,6 +64,7 @@ export default function EmployeeModal({ isOpen, onClose, onSuccess, employee = n
         position: employee.position || '',
         employment_status: employee.employment_status || 'FT',
         salary: employee.salary || '',
+        total_experience_years: employee.total_experience_years ?? '',
       });
     } else {
       // Reset for creation
@@ -79,6 +81,7 @@ export default function EmployeeModal({ isOpen, onClose, onSuccess, employee = n
         position: '',
         employment_status: 'FT',
         salary: '',
+        total_experience_years: '',
       });
     }
     setErrors({});
@@ -106,6 +109,9 @@ export default function EmployeeModal({ isOpen, onClose, onSuccess, employee = n
       ...formData,
       department: formData.department ? Number(formData.department) : null,
       salary: formData.salary ? parseFloat(formData.salary) : 0,
+      total_experience_years: formData.total_experience_years
+        ? parseInt(formData.total_experience_years, 10)
+        : 0,
     };
 
     try {
@@ -260,25 +266,55 @@ export default function EmployeeModal({ isOpen, onClose, onSuccess, employee = n
               </div>
             </div>
 
-            <div className="form-group" style={{ marginTop: '12px' }}>
-              <label className="form-label" htmlFor="salary">
-                Annual Salary ($) *
-              </label>
-              <input
-                id="salary"
-                name="salary"
-                type="number"
-                step="0.01"
-                min="0"
-                className="form-input"
-                placeholder="e.g. 75000.00"
-                value={formData.salary}
-                onChange={handleChange}
-                required
-              />
-              {errors.salary && (
-                <span className="form-error">{errors.salary[0] || errors.salary}</span>
-              )}
+            <div className="form-grid-2" style={{ marginTop: '12px' }}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="salary">
+                  Annual Salary ($) *
+                </label>
+                <input
+                  id="salary"
+                  name="salary"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="form-input"
+                  placeholder="e.g. 75000.00"
+                  value={formData.salary}
+                  onChange={handleChange}
+                  required
+                />
+                {errors.salary && (
+                  <span className="form-error">{errors.salary[0] || errors.salary}</span>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="total_experience_years">
+                  Prior Experience (years) *
+                </label>
+                <input
+                  id="total_experience_years"
+                  name="total_experience_years"
+                  type="number"
+                  min="0"
+                  max="60"
+                  className="form-input"
+                  placeholder="e.g. 5"
+                  value={formData.total_experience_years}
+                  onChange={handleChange}
+                  required
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Total experience = prior years + years of service ({
+                    formData.total_experience_years
+                      ? parseInt(formData.total_experience_years, 10) + (employee?.years_of_service || 0)
+                      : employee?.years_of_service || 0
+                  } yrs)
+                </span>
+                {errors.total_experience_years && (
+                  <span className="form-error">{errors.total_experience_years[0] || errors.total_experience_years}</span>
+                )}
+              </div>
             </div>
 
             {/* Personal Details */}

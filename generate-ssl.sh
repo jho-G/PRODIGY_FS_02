@@ -16,4 +16,3 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 echo "SSL Certificate successfully generated in $SSL_DIR:"
 echo " - Certificate: $SSL_DIR/cert.pem"
 echo " - Private Key: $SSL_DIR/key.pem"
-

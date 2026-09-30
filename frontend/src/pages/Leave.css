@@ -1,0 +1,33 @@
+.leave-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.reason-text {
+  display: inline-block;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  color: var(--text-secondary);
+}
+
+.action-icon-btn.btn-approve:hover {
+  color: var(--success);
+  border-color: var(--success);
+  background-color: var(--success-light);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 560px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}

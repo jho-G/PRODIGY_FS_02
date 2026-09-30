@@ -1,0 +1,11 @@
+.attendance-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.view-toggle {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

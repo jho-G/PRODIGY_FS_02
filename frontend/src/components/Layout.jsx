@@ -7,6 +7,10 @@ import {
   Building2,
   LogOut,
   Briefcase,
+  CalendarDays,
+  CalendarCheck,
+  Banknote,
+  Star,
 } from 'lucide-react';
 import './Layout.css';
 
@@ -73,6 +77,50 @@ export default function Layout() {
                 >
                   <Building2 size={18} />
                   <span>Departments</span>
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/leave"
+                  className={({ isActive }) =>
+                    `nav-link-item ${isActive ? 'active' : ''}`
+                  }
+                >
+                  <CalendarDays size={18} />
+                  <span>Leave</span>
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/attendance"
+                  className={({ isActive }) =>
+                    `nav-link-item ${isActive ? 'active' : ''}`
+                  }
+                >
+                  <CalendarCheck size={18} />
+                  <span>Attendance</span>
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/payroll"
+                  className={({ isActive }) =>
+                    `nav-link-item ${isActive ? 'active' : ''}`
+                  }
+                >
+                  <Banknote size={18} />
+                  <span>Payroll</span>
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/performance"
+                  className={({ isActive }) =>
+                    `nav-link-item ${isActive ? 'active' : ''}`
+                  }
+                >
+                  <Star size={18} />
+                  <span>Performance</span>
                 </NavLink>
               </li>
             </ul>
