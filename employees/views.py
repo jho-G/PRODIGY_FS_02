@@ -165,6 +165,10 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
 
     def get_queryset(self):
+        if self.action == 'restore':
+            # Soft-deleted employees are hidden by the default is_active filter,
+            # so bypass it when locating a record to restore.
+            return Employee.objects.select_related('department', 'created_by').all()
         return _filtered_employees(self.request)
 
     def perform_create(self, serializer):
