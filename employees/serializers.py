@@ -9,12 +9,26 @@ from .models import (
     PerformanceReview,
     Payslip,
 )
+from .permissions import get_role
 
 
 class UserSerializer(serializers.ModelSerializer):
+    role = serializers.SerializerMethodField()
+    employee_id = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'employee_id']
+
+    def get_role(self, obj):
+        return get_role(obj)
+
+    def get_employee_id(self, obj):
+        """Employee record id linked to this login (null for pure admins)."""
+        profile = getattr(obj, 'profile', None)
+        if profile and profile.employee_id:
+            return profile.employee_id
+        return None
 
 
 class LoginSerializer(serializers.Serializer):
