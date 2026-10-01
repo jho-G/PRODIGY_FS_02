@@ -160,7 +160,7 @@ class LeaveWorkflowTests(APITestCase):
 
 class PayslipTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='payroll', password='pass12345')
+        self.user = _user_with_role('payroll', 'ADMIN')
         self.client.force_authenticate(user=self.user)
         self.employee = Employee.objects.create(
             first_name='Samuel', last_name='Getachew',
@@ -192,7 +192,7 @@ class PayslipTests(APITestCase):
 
 class AttendanceTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='hr', password='pass12345')
+        self.user = _user_with_role('hr', 'HR')
         self.client.force_authenticate(user=self.user)
         self.employee = Employee.objects.create(
             first_name='Robel', last_name='Mulugeta',
@@ -240,7 +240,7 @@ class AttendanceTests(APITestCase):
 
 class PerformanceReviewTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='lead', password='pass12345')
+        self.user = _user_with_role('lead', 'MANAGER')
         self.client.force_authenticate(user=self.user)
         self.employee = Employee.objects.create(
             first_name='Kalkidan', last_name='Berhe',
