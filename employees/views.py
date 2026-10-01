@@ -19,6 +19,13 @@ from .permissions import (
     is_hr_or_above,
     is_manager_or_above,
 )
+from .notifications import (
+    notify_document_uploaded,
+    notify_leave_decision,
+    notify_leave_submitted,
+    notify_payslip_generated,
+    notify_review_completed,
+)
 
 from .models import (
     AttendanceRecord,
@@ -454,7 +461,8 @@ class EmployeeDocumentViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(uploaded_by=self.request.user)
+        document = serializer.save(uploaded_by=self.request.user)
+        notify_document_uploaded(document)
 
 
 class LeaveRequestViewSet(viewsets.ModelViewSet):
@@ -533,6 +541,11 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         leave.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
         return leave
 
+    def perform_create(self, serializer):
+        """Notify the manager (or HR) when a new leave request is submitted."""
+        leave = serializer.save()
+        notify_leave_submitted(leave)
+
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         """Approve a pending leave request (manager of the employee, HR, or admin)."""
@@ -564,6 +577,7 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
                 )
 
         leave = self._perform_review(leave, 'APPROVED')
+        notify_leave_decision(leave)
         return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
@@ -581,6 +595,7 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         leave = self._perform_review(leave, 'REJECTED')
+        notify_leave_decision(leave)
         return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
@@ -600,6 +615,7 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         leave = self._perform_review(leave, 'CANCELLED')
+        notify_leave_decision(leave)
         return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
 
 
@@ -790,6 +806,7 @@ class PayslipViewSet(viewsets.ModelViewSet):
                     'currency': emp.currency or 'USD',
                 },
             )
+            notify_payslip_generated(payslip)
             created_count += 1 if created else 0
             updated_count += 0 if created else 1
         
@@ -890,6 +907,7 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
         review.status = 'COMPLETED'
         review.reviewer = request.user
         review.save(update_fields=['status', 'reviewer', 'updated_at'])
+        notify_review_completed(review)
         return Response(PerformanceReviewSerializer(review).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
