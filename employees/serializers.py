@@ -283,6 +283,11 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
             'id', 'days_count', 'leave_days', 'status', 'reviewed_by',
             'reviewed_by_username', 'reviewed_at', 'created_at', 'updated_at',
         ]
+        extra_kwargs = {
+            # Optional so self-service users can omit it; the viewset assigns
+            # the linked employee automatically in perform_create.
+            'employee': {'required': False},
+        }
 
     def validate(self, attrs):
         start = attrs.get('start_date')

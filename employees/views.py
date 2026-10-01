@@ -1,4 +1,5 @@
 from rest_framework import viewsets, permissions, status, filters
+from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -621,8 +622,26 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         return leave
 
     def perform_create(self, serializer):
-        """Notify the manager (or HR) when a new leave request is submitted."""
-        leave = serializer.save()
+        """Auto-assign the employee for self-service requests, then notify."""
+        employee_param = self.request.data.get('employee')
+        role = get_role(self.request.user)
+        own_employee = self._own_employee()
+
+        if employee_param and role == ROLE_EMPLOYEE:
+            if not own_employee or int(employee_param) != own_employee.id:
+                raise ValidationError(
+                    {'employee': 'You can only submit leave requests for yourself.'}
+                )
+
+        if not employee_param:
+            if not own_employee:
+                raise ValidationError(
+                    {'employee': 'No employee record is linked to your account; '
+                                 'pass an explicit employee id.'}
+                )
+            leave = serializer.save(employee=own_employee)
+        else:
+            leave = serializer.save()
         notify_leave_submitted(leave)
 
     @action(detail=True, methods=['post'])
