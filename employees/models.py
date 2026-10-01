@@ -12,6 +12,35 @@ def _years_between(start, end):
     return end.year - start.year - ((end.month, end.day) < (start.month, start.day))
 
 
+class UserProfile(models.Model):
+    """
+    Role-based access control profile attached to each Django user.
+    Links the login account to the Employee record for self-service.
+    """
+
+    ROLE_CHOICES = [
+        ('ADMIN', 'Administrator'),
+        ('HR', 'HR'),
+        ('MANAGER', 'Manager'),
+        ('EMPLOYEE', 'Employee'),
+    ]
+
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name='profile'
+    )
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='EMPLOYEE')
+    employee = models.OneToOneField(
+        'Employee',
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='user_account',
+        help_text="Employee record belonging to this login (for self-service).",
+    )
+    phone_number = models.CharField(max_length=17, blank=True)
+
+    def __str__(self):
+        return f"{self.user.username} ({self.get_role_display()})"
+
+
 class Department(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
@@ -57,6 +86,13 @@ class Employee(models.Model):
     # Employment Details
     employee_id = models.CharField(max_length=20, unique=True)
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True)
+    manager = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='direct_reports',
+        help_text="Direct supervisor responsible for approving this employee's leave.",
+    )
     position = models.CharField(max_length=100)
     hire_date = models.DateField(auto_now_add=True)
     employment_status = models.CharField(max_length=2, choices=EMPLOYMENT_STATUS, default='FT')
@@ -375,3 +411,132 @@ class PerformanceReview(models.Model):
         if rating >= 1.5:
             return 'Needs Improvement'
         return 'Unsatisfactory'
+
+
+class Holiday(models.Model):
+    """
+    Company-wide holiday. Working-day calculations (leave duration,
+    attendance expectations) skip these dates.
+    """
+
+    name = models.CharField(max_length=100)
+    date = models.DateField(unique=True)
+    description = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['date']
+
+    def __str__(self):
+        return f"{self.name} ({self.date})"
+
+
+class EmploymentEvent(models.Model):
+    """
+    Timeline entry for employment changes: hires, promotions, department
+    transfers, salary revisions, and exits. Snapshot fields preserve the
+    state at the time of the change.
+    """
+
+    EVENT_TYPES = [
+        ('HIRED', 'Hired'),
+        ('PROMOTION', 'Promotion'),
+        ('TRANSFER', 'Department Transfer'),
+        ('SALARY_CHANGE', 'Salary Change'),
+        ('ROLE_CHANGE', 'Employment Status Change'),
+        ('EXIT', 'Exit'),
+    ]
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name='employment_events'
+    )
+    event_type = models.CharField(max_length=15, choices=EVENT_TYPES)
+    effective_date = models.DateField(default=date.today)
+    notes = models.CharField(max_length=255, blank=True)
+
+    # Snapshots of the state relevant to the event
+    previous_department = models.ForeignKey(
+        Department, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+',
+    )
+    new_department = models.ForeignKey(
+        Department, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+',
+    )
+    previous_position = models.CharField(max_length=100, blank=True)
+    new_position = models.CharField(max_length=100, blank=True)
+    previous_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    new_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='employment_events_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-effective_date', '-created_at']
+
+    def __str__(self):
+        return f"{self.employee} - {self.get_event_type_display()} ({self.effective_date})"
+
+
+def _document_upload_path(instance, filename):
+    return f'documents/employee_{instance.employee_id}/{filename}'
+
+
+class EmployeeDocument(models.Model):
+    """
+    File attached to an employee: contract, ID copy, certificate, etc.
+    """
+
+    CATEGORY_CHOICES = [
+        ('CONTRACT', 'Contract'),
+        ('ID', 'ID Document'),
+        ('CERTIFICATE', 'Certificate'),
+        ('EVALUATION', 'Evaluation'),
+        ('OTHER', 'Other'),
+    ]
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name='documents'
+    )
+    document_type = models.CharField(max_length=15, choices=CATEGORY_CHOICES, default='OTHER')
+    title = models.CharField(max_length=100)
+    file = models.FileField(upload_to=_document_upload_path, max_length=300)
+    uploaded_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='documents_uploaded',
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"{self.employee} - {self.title}"
+
+
+class Notification(models.Model):
+    """
+    In-app notification delivered to a user. Generated by system events
+    (leave decisions, payslip generation, review assignments...).
+    """
+
+    recipient = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='notifications'
+    )
+    verb = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    link = models.CharField(
+        max_length=200, blank=True,
+        help_text="Frontend route to open when the notification is clicked.",
+    )
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.recipient.username}: {self.verb}"
