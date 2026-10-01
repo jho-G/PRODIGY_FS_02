@@ -24,6 +24,7 @@ from .models import (
     AttendanceRecord,
     Employee,
     Department,
+    Holiday,
     LeaveRequest,
     PerformanceReview,
     Payslip,
@@ -32,6 +33,7 @@ from .serializers import (
     AttendanceRecordSerializer,
     EmployeeSerializer,
     DepartmentSerializer,
+    HolidaySerializer,
     PerformanceReviewSerializer,
     PayslipSerializer,
     UserSerializer,
@@ -98,6 +100,32 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'id']
+
+
+class HolidayViewSet(viewsets.ModelViewSet):
+    """
+    CRUD ViewSet for company holidays.
+    Reads: any authenticated user. Writes: HR/admin only.
+    """
+    queryset = Holiday.objects.all().order_by('date')
+    serializer_class = HolidaySerializer
+    permission_classes = [permissions.IsAuthenticated, IsHROrAdmin]
+    filter_backends = [filters.OrderingFilter, filters.SearchFilter]
+    search_fields = ['name', 'description']
+    ordering_fields = ['date', 'name']
+
+    @action(detail=False, methods=['get'])
+    def upcoming(self, request):
+        """List the next N holidays from today (default 5)."""
+        from datetime import date as dt_date
+        try:
+            limit = int(request.query_params.get('limit', 5))
+        except (TypeError, ValueError):
+            limit = 5
+        limit = max(1, min(limit, 50))
+        today = dt_date.today()
+        holidays = self.get_queryset().filter(date__gte=today)[:limit]
+        return Response(HolidaySerializer(holidays, many=True).data)
 
 
 def _filtered_employees(request):

@@ -5,6 +5,7 @@ from .models import (
     AttendanceRecord,
     Department,
     Employee,
+    Holiday,
     LeaveRequest,
     PerformanceReview,
     Payslip,
@@ -48,6 +49,22 @@ class LoginSerializer(serializers.Serializer):
             attrs['user'] = user
             return attrs
         raise serializers.ValidationError('Must include "username" and "password".')
+
+
+class HolidaySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Holiday
+        fields = ['id', 'name', 'date', 'description', 'created_at']
+        read_only_fields = ['created_at']
+
+    def validate_date(self, value):
+        instance = getattr(self, 'instance', None)
+        query = Holiday.objects.filter(date=value)
+        if instance:
+            query = query.exclude(pk=instance.pk)
+        if query.exists():
+            raise serializers.ValidationError("A holiday already exists on this date.")
+        return value
 
 
 class DepartmentSerializer(serializers.ModelSerializer):

@@ -4,6 +4,7 @@ from .views import (
     AttendanceViewSet,
     DepartmentViewSet,
     EmployeeViewSet,
+    HolidayViewSet,
     LeaveRequestViewSet,
     LoginAPIView,
     LogoutAPIView,
@@ -13,6 +14,7 @@ from .views import (
 )
 
 router = DefaultRouter()
+router.register(r'holidays', HolidayViewSet, basename='holiday')
 router.register(r'departments', DepartmentViewSet, basename='department')
 router.register(r'employees', EmployeeViewSet, basename='employee')
 router.register(r'leaves', LeaveRequestViewSet, basename='leave')
