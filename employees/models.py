@@ -1,7 +1,7 @@
 from django.db import models
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator, EmailValidator
 from django.contrib.auth.models import User
-from datetime import date, datetime, time as datetime_time
+from datetime import date, datetime, time as datetime_time, timedelta
 from decimal import Decimal
 
 
@@ -153,6 +153,23 @@ class Employee(models.Model):
         return self.total_experience_years + self.years_of_service
 
 
+def working_days_between(start_date, end_date, holiday_dates=None):
+    """
+    Count inclusive working days between two dates, skipping weekends
+    (Sat/Sun) and any provided company holiday dates.
+    """
+    if start_date is None or end_date is None or end_date < start_date:
+        return 0
+    holidays = set(holiday_dates or [])
+    days = 0
+    current = start_date
+    while current <= end_date:
+        if current.weekday() < 5 and current not in holidays:
+            days += 1
+        current += timedelta(days=1)
+    return days
+
+
 class LeaveRequest(models.Model):
     """
     Employee leave/vacation requests with manager approval workflow.
@@ -179,7 +196,9 @@ class LeaveRequest(models.Model):
     leave_type = models.CharField(max_length=2, choices=LEAVE_TYPES, default='VL')
     start_date = models.DateField()
     end_date = models.DateField()
+    # Stored raw calendar-span days; leave_days holds the working-day count
     days_count = models.PositiveIntegerField(editable=False, default=0)
+    leave_days = models.PositiveIntegerField(editable=False, default=0)
     reason = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDING')
     reviewed_by = models.ForeignKey(
@@ -194,12 +213,20 @@ class LeaveRequest(models.Model):
         ordering = ['-created_at']
 
     def save(self, *args, **kwargs):
-        # Inclusive day count between start and end dates
+        # Calendar-span days and working-day count (excludes weekends and
+        # company holidays falling inside the range)
         if self.start_date and self.end_date and self.end_date >= self.start_date:
             delta = self.end_date - self.start_date
             self.days_count = delta.days + 1
+            self.leave_days = working_days_between(
+                self.start_date, self.end_date,
+                holiday_dates=Holiday.objects.filter(
+                    date__gte=self.start_date, date__lte=self.end_date
+                ).values_list('date', flat=True),
+            )
         else:
             self.days_count = 0
+            self.leave_days = 0
         super().save(*args, **kwargs)
 
     def __str__(self):

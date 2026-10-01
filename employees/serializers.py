@@ -185,6 +185,7 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
             'start_date',
             'end_date',
             'days_count',
+            'leave_days',
             'reason',
             'status',
             'reviewed_by',
@@ -194,8 +195,8 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = [
-            'id', 'days_count', 'status', 'reviewed_by', 'reviewed_by_username',
-            'reviewed_at', 'created_at', 'updated_at',
+            'id', 'days_count', 'leave_days', 'status', 'reviewed_by',
+            'reviewed_by_username', 'reviewed_at', 'created_at', 'updated_at',
         ]
 
     def validate(self, attrs):
