@@ -11,11 +11,19 @@ from .models import (
     LeaveRequest,
     PerformanceReview,
     Payslip,
+    UserProfile,
 )
 
 
 def _days_ago(days):
     return date.today() - timedelta(days=days)
+
+
+def _user_with_role(username, role, employee=None):
+    """Create a user with a UserProfile role and optional linked employee."""
+    user = User.objects.create_user(username=username, password='pass12345')
+    UserProfile.objects.create(user=user, role=role, employee=employee)
+    return user
 
 
 class EmployeeModelTests(APITestCase):
@@ -57,7 +65,7 @@ class EmployeeModelTests(APITestCase):
 
 class EmployeeAPITests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='admin', password='pass12345')
+        self.user = _user_with_role('admin', 'ADMIN')
         self.client.force_authenticate(user=self.user)
         self.department = Department.objects.create(name='Finance')
         self.employee = Employee.objects.create(
@@ -106,13 +114,22 @@ class EmployeeAPITests(APITestCase):
 
 class LeaveWorkflowTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='manager', password='pass12345')
+        # The acting user is a manager with an employee record of their own;
+        # the leave requester reports to them.
+        self.manager_employee = Employee.objects.create(
+            first_name='Tesfaye', last_name='Negash',
+            email='tesfaye.negash@example.com', date_of_birth=date(1985, 2, 2),
+            gender='M', address='Addis Ababa', employee_id='EMP-9200',
+            position='HR Manager', salary=85000,
+        )
+        self.user = _user_with_role('manager', 'MANAGER', employee=self.manager_employee)
         self.client.force_authenticate(user=self.user)
         self.employee = Employee.objects.create(
             first_name='Hanna', last_name='Worku',
             email='hanna.worku@example.com', date_of_birth=date(1996, 9, 9),
             gender='F', address='Addis Ababa', employee_id='EMP-9201',
             position='HR Officer', salary=55000,
+            manager=self.manager_employee,
         )
         self.leave = LeaveRequest.objects.create(
             employee=self.employee, leave_type='VL',
