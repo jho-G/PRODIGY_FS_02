@@ -12,6 +12,10 @@ from datetime import datetime, timezone as dt_timezone
 from .permissions import (
     IsAuthenticatedReadOnlyOrStaff,
     IsHROrAdmin,
+    ROLE_EMPLOYEE,
+    ROLE_MANAGER,
+    get_role,
+    is_direct_manager,
     is_hr_or_above,
     is_manager_or_above,
 )
@@ -315,6 +319,10 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 class LeaveRequestViewSet(viewsets.ModelViewSet):
     """
     CRUD ViewSet for employee leave requests with approval workflow.
+
+    Visibility: employees see their own requests; managers see their own plus
+    their direct reports'; HR/admin see everything.
+    Approval: HR/admin, or the employee's direct manager.
     """
     serializer_class = LeaveRequestSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -325,6 +333,10 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
     ]
     ordering_fields = ['start_date', 'end_date', 'created_at', 'status']
     ordering = ['-created_at']
+
+    def _own_employee(self):
+        profile = getattr(self.request.user, 'profile', None)
+        return profile.employee if profile else None
 
     def get_queryset(self):
         queryset = LeaveRequest.objects.select_related(
@@ -343,48 +355,94 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         if leave_type:
             queryset = queryset.filter(leave_type=leave_type)
 
+        # Role-based visibility scoping
+        role = get_role(self.request.user)
+        own_employee = self._own_employee()
+        if role == ROLE_EMPLOYEE:
+            queryset = (
+                queryset.filter(employee=own_employee)
+                if own_employee else queryset.none()
+            )
+        elif role == ROLE_MANAGER:
+            if own_employee:
+                queryset = queryset.filter(
+                    Q(employee=own_employee) | Q(employee__manager=own_employee)
+                )
+            else:
+                queryset = queryset.none()
+
         return queryset
+
+    def _can_review(self, leave):
+        """HR/admin can review anyone; managers only their direct reports."""
+        user = self.request.user
+        if is_hr_or_above(user):
+            return True
+        if get_role(user) == ROLE_MANAGER:
+            own_employee = self._own_employee()
+            return bool(own_employee and leave.employee.manager_id == own_employee.id)
+        return False
+
+    def _perform_review(self, leave, new_status):
+        leave.status = new_status
+        # Only manager-level reviewers are recorded as the decision maker
+        if self._can_review(leave):
+            leave.reviewed_by = self.request.user
+            leave.reviewed_at = datetime.now()
+        leave.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+        return leave
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """Approve a pending leave request."""
+        """Approve a pending leave request (manager of the employee, HR, or admin)."""
         leave = self.get_object()
+        if not self._can_review(leave):
+            return Response(
+                {'detail': 'You can only approve leave for your direct reports.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if leave.status != 'PENDING':
             return Response(
                 {'detail': f'Only pending requests can be approved (current: {leave.status}).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        leave.status = 'APPROVED'
-        leave.reviewed_by = request.user
-        leave.save(update_fields=['status', 'reviewed_by', 'updated_at'])
+        leave = self._perform_review(leave, 'APPROVED')
         return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        """Reject a pending leave request."""
+        """Reject a pending leave request (manager of the employee, HR, or admin)."""
         leave = self.get_object()
+        if not self._can_review(leave):
+            return Response(
+                {'detail': 'You can only reject leave for your direct reports.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if leave.status != 'PENDING':
             return Response(
                 {'detail': f'Only pending requests can be rejected (current: {leave.status}).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        leave.status = 'REJECTED'
-        leave.reviewed_by = request.user
-        leave.save(update_fields=['status', 'reviewed_by', 'updated_at'])
+        leave = self._perform_review(leave, 'REJECTED')
         return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
-        """Cancel an approved leave request."""
+        """Cancel an approved leave request (owner, manager of the owner, HR, or admin)."""
         leave = self.get_object()
+        own_employee = self._own_employee()
+        is_owner = own_employee and leave.employee_id == own_employee.id
+        if not (is_owner or self._can_review(leave)):
+            return Response(
+                {'detail': 'You can only cancel your own leave or that of your direct reports.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if leave.status != 'APPROVED':
             return Response(
                 {'detail': f'Only approved requests can be cancelled (current: {leave.status}).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        leave.status = 'CANCELLED'
-        leave.reviewed_by = request.user
-        leave.save(update_fields=['status', 'reviewed_by', 'updated_at'])
+        leave = self._perform_review(leave, 'CANCELLED')
         return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
 
 
