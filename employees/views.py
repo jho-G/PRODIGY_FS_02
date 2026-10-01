@@ -9,6 +9,13 @@ from django.contrib.auth import login, logout
 from django.http import HttpResponse
 from datetime import datetime, timezone as dt_timezone
 
+from .permissions import (
+    IsAuthenticatedReadOnlyOrStaff,
+    IsHROrAdmin,
+    is_hr_or_above,
+    is_manager_or_above,
+)
+
 from .models import (
     AttendanceRecord,
     Employee,
@@ -79,10 +86,11 @@ class CurrentUserAPIView(APIView):
 class DepartmentViewSet(viewsets.ModelViewSet):
     """
     CRUD ViewSet for Departments.
+    Reads: any authenticated user. Writes: manager+. Deletes: HR/admin only.
     """
     queryset = Department.objects.all().order_by('name')
     serializer_class = DepartmentSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticatedReadOnlyOrStaff]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'id']
@@ -157,9 +165,11 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     """
     CRUD ViewSet for Employees with search, filtering, soft-delete, statistics,
     payroll metrics, and CSV export.
+    Reads: any authenticated user (company directory).
+    Writes: manager+. Deletes: HR/admin only.
     """
     serializer_class = EmployeeSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticatedReadOnlyOrStaff]
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['first_name', 'last_name', 'hire_date', 'salary', 'created_at', 'employee_id']
     ordering = ['-created_at']
