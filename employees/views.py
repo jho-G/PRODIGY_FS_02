@@ -701,6 +701,7 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
 class AttendanceViewSet(viewsets.ModelViewSet):
     """
     CRUD ViewSet for daily attendance records with check-in/out actions.
+    Employees are scoped to their own records; manager+ see everyone's.
     """
     serializer_class = AttendanceRecordSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -714,6 +715,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         employee = self.request.query_params.get('employee')
         if employee:
             queryset = queryset.filter(employee_id=employee)
+
+        # Employees see only their own attendance
+        if get_role(self.request.user) == ROLE_EMPLOYEE:
+            profile = getattr(self.request.user, 'profile', None)
+            own_employee = profile.employee if profile else None
+            queryset = queryset.filter(employee=own_employee) if own_employee else queryset.none()
 
         date_param = self.request.query_params.get('date')
         if date_param:
@@ -817,6 +824,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 class PayslipViewSet(viewsets.ModelViewSet):
     """
     CRUD ViewSet for monthly payslips with bulk payroll generation.
+    Employees are scoped to their own payslips; manager+ see everyone's.
     """
     serializer_class = PayslipSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -832,6 +840,12 @@ class PayslipViewSet(viewsets.ModelViewSet):
         employee = self.request.query_params.get('employee')
         if employee:
             queryset = queryset.filter(employee_id=employee)
+
+        # Employees see only their own payslips
+        if get_role(self.request.user) == ROLE_EMPLOYEE:
+            profile = getattr(self.request.user, 'profile', None)
+            own_employee = profile.employee if profile else None
+            queryset = queryset.filter(employee=own_employee) if own_employee else queryset.none()
 
         department = self.request.query_params.get('department')
         if department:
@@ -971,6 +985,12 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
         period = self.request.query_params.get('review_period')
         if period:
             queryset = queryset.filter(review_period__icontains=period)
+
+        # Employees see only their own reviews
+        if get_role(self.request.user) == ROLE_EMPLOYEE:
+            profile = getattr(self.request.user, 'profile', None)
+            own_employee = profile.employee if profile else None
+            queryset = queryset.filter(employee=own_employee) if own_employee else queryset.none()
 
         return queryset
 
