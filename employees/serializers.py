@@ -5,6 +5,7 @@ from .models import (
     AttendanceRecord,
     Department,
     Employee,
+    EmploymentEvent,
     Holiday,
     LeaveRequest,
     PerformanceReview,
@@ -49,6 +50,31 @@ class LoginSerializer(serializers.Serializer):
             attrs['user'] = user
             return attrs
         raise serializers.ValidationError('Must include "username" and "password".')
+
+
+class EmploymentEventSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    employee_id_code = serializers.CharField(source='employee.employee_id', read_only=True)
+    previous_department_name = serializers.CharField(
+        source='previous_department.name', read_only=True
+    )
+    new_department_name = serializers.CharField(
+        source='new_department.name', read_only=True
+    )
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+
+    class Meta:
+        model = EmploymentEvent
+        fields = [
+            'id', 'employee', 'employee_name', 'employee_id_code',
+            'event_type', 'effective_date', 'notes',
+            'previous_department', 'previous_department_name',
+            'new_department', 'new_department_name',
+            'previous_position', 'new_position',
+            'previous_salary', 'new_salary',
+            'created_by', 'created_by_username', 'created_at',
+        ]
+        read_only_fields = [field for field in fields]
 
 
 class HolidaySerializer(serializers.ModelSerializer):

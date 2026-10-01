@@ -24,6 +24,7 @@ from .models import (
     AttendanceRecord,
     Employee,
     Department,
+    EmploymentEvent,
     Holiday,
     LeaveRequest,
     PerformanceReview,
@@ -33,6 +34,7 @@ from .serializers import (
     AttendanceRecordSerializer,
     EmployeeSerializer,
     DepartmentSerializer,
+    EmploymentEventSerializer,
     HolidaySerializer,
     PerformanceReviewSerializer,
     PayslipSerializer,
@@ -214,16 +216,74 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         return _filtered_employees(self.request)
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        employee = serializer.save(created_by=self.request.user)
+        # Seed the employment history timeline with the hire event
+        EmploymentEvent.objects.create(
+            employee=employee,
+            event_type='HIRED',
+            effective_date=employee.hire_date,
+            new_department=employee.department,
+            new_position=employee.position,
+            new_salary=employee.salary,
+            notes=f"Joined as {employee.position}.",
+            created_by=self.request.user,
+        )
+
+    def perform_update(self, serializer):
+        """Persist changes and record promotion/transfer/salary events."""
+        original = Employee.objects.get(pk=serializer.instance.pk)
+        employee = serializer.save()
+        events = []
+
+        if original.department_id != employee.department_id:
+            events.append(EmploymentEvent(
+                employee=employee,
+                event_type='TRANSFER',
+                previous_department=original.department,
+                new_department=employee.department,
+                notes=(
+                    f"Moved from {original.department.name if original.department else 'Unassigned'} "
+                    f"to {employee.department.name if employee.department else 'Unassigned'}."
+                ),
+                created_by=self.request.user,
+            ))
+
+        if original.position != employee.position:
+            events.append(EmploymentEvent(
+                employee=employee,
+                event_type='PROMOTION',
+                previous_position=original.position,
+                new_position=employee.position,
+                notes=f"{original.position} → {employee.position}.",
+                created_by=self.request.user,
+            ))
+
+        if original.salary != employee.salary:
+            events.append(EmploymentEvent(
+                employee=employee,
+                event_type='SALARY_CHANGE',
+                previous_salary=original.salary,
+                new_salary=employee.salary,
+                notes=f"Annual salary changed from {original.salary} to {employee.salary}.",
+                created_by=self.request.user,
+            ))
+
+        EmploymentEvent.objects.bulk_create(events)
 
     def perform_destroy(self, instance):
         hard_delete = self.request.query_params.get('hard', '').lower() == 'true'
         if hard_delete:
             instance.delete()
         else:
-            # Soft delete by deactivating
+            # Soft delete by deactivating, recording the exit on the timeline
             instance.is_active = False
             instance.save()
+            EmploymentEvent.objects.create(
+                employee=instance,
+                event_type='EXIT',
+                notes="Deactivated (soft-deleted) in the system.",
+                created_by=self.request.user,
+            )
 
     @action(detail=True, methods=['post'])
     def restore(self, request, pk=None):
@@ -342,6 +402,30 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             'department_breakdown': list(dept_breakdown),
             'status_breakdown': status_breakdown,
         }, status=status.HTTP_200_OK)
+
+
+class EmploymentEventViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only employment history timeline per employee. Seeded automatically
+    from employee create/update/delete operations.
+    """
+    serializer_class = EmploymentEventSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['effective_date', 'created_at', 'event_type']
+    ordering = ['-effective_date', '-created_at']
+
+    def get_queryset(self):
+        queryset = EmploymentEvent.objects.select_related(
+            'employee', 'previous_department', 'new_department', 'created_by'
+        ).all()
+        employee = self.request.query_params.get('employee')
+        if employee:
+            queryset = queryset.filter(employee_id=employee)
+        event_type = self.request.query_params.get('event_type')
+        if event_type:
+            queryset = queryset.filter(event_type=event_type.upper())
+        return queryset
 
 
 class LeaveRequestViewSet(viewsets.ModelViewSet):
