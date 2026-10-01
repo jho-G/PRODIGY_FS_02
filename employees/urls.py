@@ -11,6 +11,7 @@ from .views import (
     LoginAPIView,
     LogoutAPIView,
     CurrentUserAPIView,
+    MeAPIView,
     NotificationViewSet,
     PerformanceReviewViewSet,
     PayslipViewSet,
@@ -31,6 +32,7 @@ router.register(r'performance-reviews', PerformanceReviewViewSet, basename='perf
 urlpatterns = [
     # Authentication endpoints
     path('auth/login/', LoginAPIView.as_view(), name='api_login'),
+    path('auth/me/', MeAPIView.as_view(), name='api_me'),
     path('auth/logout/', LogoutAPIView.as_view(), name='api_logout'),
     path('auth/user/', CurrentUserAPIView.as_view(), name='api_user'),
 

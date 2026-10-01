@@ -75,6 +75,51 @@ class LoginAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class MeAPIView(APIView):
+    """
+    Employee self-service: the logged-in user's own profile, leave history,
+    leave balance, payslips, reviews, documents, and employment timeline.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        profile = getattr(request.user, 'profile', None)
+        employee = profile.employee if profile else None
+        if not employee:
+            return Response(
+                {'detail': 'No employee record is linked to this account.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        leave_requests = employee.leave_requests.all()[:20]
+        payslips = employee.payslips.all()[:12]
+        reviews = employee.performance_reviews.all()[:10]
+        documents = employee.documents.all()[:20]
+        events = employee.employment_events.all()[:20]
+
+        return Response({
+            'employee': EmployeeSerializer(employee).data,
+            'leave_balance': {
+                'entitlement': employee.annual_leave_days,
+                'used': employee.annual_leave_used(),
+                'remaining': employee.annual_leave_remaining,
+            },
+            'leave_requests': LeaveRequestSerializer(leave_requests, many=True).data,
+            'payslips': PayslipSerializer(payslips, many=True).data,
+            'reviews': PerformanceReviewSerializer(reviews, many=True).data,
+            'documents': EmployeeDocumentSerializer(documents, many=True).data,
+            'employment_history': EmploymentEventSerializer(events, many=True).data,
+            'manager': (
+                {
+                    'id': employee.manager.id,
+                    'name': employee.manager.full_name,
+                    'position': employee.manager.position,
+                }
+                if employee.manager else None
+            ),
+        })
+
+
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     """
     In-app notifications for the logged-in user: list, unread count,
