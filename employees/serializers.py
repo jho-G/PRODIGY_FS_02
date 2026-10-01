@@ -94,6 +94,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     age = serializers.ReadOnlyField()
     years_of_service = serializers.ReadOnlyField()
     effective_experience_years = serializers.ReadOnlyField()
+    annual_leave_remaining = serializers.ReadOnlyField()
     monthly_salary = serializers.DecimalField(
         source='salary_monthly', max_digits=10, decimal_places=2, read_only=True
     )
@@ -130,6 +131,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'years_of_service',
             'effective_experience_years',
             'annual_leave_days',
+            'annual_leave_remaining',
             'created_by',
             'created_by_username',
             'created_at',
@@ -142,6 +144,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'age',
             'years_of_service',
             'effective_experience_years',
+            'annual_leave_remaining',
             'department_name',
             'department_detail',
             'created_by',

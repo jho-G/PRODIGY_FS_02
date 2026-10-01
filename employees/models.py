@@ -152,6 +152,23 @@ class Employee(models.Model):
         """Prior experience at hire plus years served in the company."""
         return self.total_experience_years + self.years_of_service
 
+    def annual_leave_used(self, year=None):
+        """Working days of approved vacation leave taken in the given year."""
+        year = year or date.today().year
+        return sum(
+            LeaveRequest.objects.filter(
+                employee=self,
+                leave_type='VL',
+                status='APPROVED',
+                start_date__year=year,
+            ).values_list('leave_days', flat=True)
+        )
+
+    @property
+    def annual_leave_remaining(self):
+        """Entitlement minus approved vacation days for the current year."""
+        return max(self.annual_leave_days - self.annual_leave_used(), 0)
+
 
 def working_days_between(start_date, end_date, holiday_dates=None):
     """

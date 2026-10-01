@@ -434,6 +434,22 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
                 {'detail': f'Only pending requests can be approved (current: {leave.status}).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Enforce the employee's annual vacation entitlement before approving
+        if leave.leave_type == 'VL':
+            employee = leave.employee
+            already_used = employee.annual_leave_used()
+            if leave.leave_days > employee.annual_leave_days - already_used:
+                return Response(
+                    {
+                        'detail': (
+                            f'Insufficient leave balance: {leave.leave_days} working days requested, '
+                            f'{employee.annual_leave_days - already_used} of '
+                            f'{employee.annual_leave_days} remaining.'
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         leave = self._perform_review(leave, 'APPROVED')
         return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
 
