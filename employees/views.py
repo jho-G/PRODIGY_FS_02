@@ -910,6 +910,43 @@ class PayslipViewSet(viewsets.ModelViewSet):
             'total': created_count + updated_count,
         }, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['get'], url_path='export')
+    def export(self, request):
+        """Export payslips (filtered by year/month/department) as CSV."""
+        import csv
+
+        payslips = self.get_queryset().order_by('period_year', 'period_month', 'employee__employee_id')
+
+        response = HttpResponse(content_type='text/csv')
+        filename = f"payroll_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        writer = csv.writer(response)
+        writer.writerow([
+            'Employee ID', 'Employee Name', 'Department', 'Period',
+            'Basic Salary', 'Allowances', 'Bonus', 'Gross Pay',
+            'Tax', 'Other Deductions', 'Total Deductions',
+            'Net Pay', 'Currency', 'Generated At',
+        ])
+        for slip in payslips:
+            writer.writerow([
+                slip.employee.employee_id,
+                slip.employee.full_name,
+                slip.employee.department.name if slip.employee.department else '',
+                slip.period_label,
+                slip.basic_salary,
+                slip.allowances,
+                slip.bonus,
+                slip.gross_pay,
+                slip.tax_deduction,
+                slip.other_deductions,
+                slip.total_deductions,
+                slip.net_pay,
+                slip.currency,
+                slip.generated_at.strftime('%Y-%m-%d %H:%M'),
+            ])
+        return response
+
     @action(detail=False, methods=['get'])
     def summary(self, request):
         """Aggregate payroll totals for a given period (default: latest year)."""
