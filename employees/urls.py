@@ -4,6 +4,7 @@ from .views import (
     AttendanceViewSet,
     DepartmentViewSet,
     EmployeeViewSet,
+    EmployeeDocumentViewSet,
     EmploymentEventViewSet,
     HolidayViewSet,
     LeaveRequestViewSet,
@@ -15,6 +16,7 @@ from .views import (
 )
 
 router = DefaultRouter()
+router.register(r'documents', EmployeeDocumentViewSet, basename='employee-document')
 router.register(r'employment-events', EmploymentEventViewSet, basename='employment-event')
 router.register(r'holidays', HolidayViewSet, basename='holiday')
 router.register(r'departments', DepartmentViewSet, basename='department')

@@ -5,6 +5,7 @@ from .models import (
     AttendanceRecord,
     Department,
     Employee,
+    EmployeeDocument,
     EmploymentEvent,
     Holiday,
     LeaveRequest,
@@ -50,6 +51,53 @@ class LoginSerializer(serializers.Serializer):
             attrs['user'] = user
             return attrs
         raise serializers.ValidationError('Must include "username" and "password".')
+
+
+class EmployeeDocumentSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.full_name', read_only=True)
+    uploaded_by_username = serializers.CharField(source='uploaded_by.username', read_only=True)
+    file_name = serializers.CharField(source='file.name', read_only=True)
+    file_size = serializers.SerializerMethodField()
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EmployeeDocument
+        fields = [
+            'id', 'employee', 'employee_name', 'document_type', 'title',
+            'file', 'file_name', 'file_size', 'file_url',
+            'uploaded_by', 'uploaded_by_username', 'uploaded_at',
+        ]
+        read_only_fields = [
+            'id', 'file_name', 'file_size', 'file_url',
+            'uploaded_by', 'uploaded_by_username', 'uploaded_at',
+        ]
+
+    def get_file_size(self, obj):
+        try:
+            return obj.file.size
+        except (ValueError, OSError):
+            return 0
+
+    def get_file_url(self, obj):
+        try:
+            return obj.file.url
+        except ValueError:
+            return None
+
+    def validate_file(self, value):
+        """Restrict uploads to common document formats and 10 MB."""
+        max_bytes = 10 * 1024 * 1024
+        allowed = {
+            'pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx', 'xls', 'xlsx',
+        }
+        ext = value.name.rsplit('.', 1)[-1].lower() if '.' in value.name else ''
+        if ext not in allowed:
+            raise serializers.ValidationError(
+                f'Unsupported file type "-{ext}". Allowed: {", ".join(sorted(allowed))}.'
+            )
+        if value.size > max_bytes:
+            raise serializers.ValidationError('File exceeds the 10 MB limit.')
+        return value
 
 
 class EmploymentEventSerializer(serializers.ModelSerializer):

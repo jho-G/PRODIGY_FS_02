@@ -24,6 +24,7 @@ from .models import (
     AttendanceRecord,
     Employee,
     Department,
+    EmployeeDocument,
     EmploymentEvent,
     Holiday,
     LeaveRequest,
@@ -34,6 +35,7 @@ from .serializers import (
     AttendanceRecordSerializer,
     EmployeeSerializer,
     DepartmentSerializer,
+    EmployeeDocumentSerializer,
     EmploymentEventSerializer,
     HolidaySerializer,
     PerformanceReviewSerializer,
@@ -426,6 +428,33 @@ class EmploymentEventViewSet(viewsets.ReadOnlyModelViewSet):
         if event_type:
             queryset = queryset.filter(event_type=event_type.upper())
         return queryset
+
+
+class EmployeeDocumentViewSet(viewsets.ModelViewSet):
+    """
+    Upload and manage employee documents (contracts, IDs, certificates).
+    Multipart uploads; HR/admin and the owning employee can manage.
+    """
+    serializer_class = EmployeeDocumentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['uploaded_at', 'title', 'document_type']
+    ordering = ['-uploaded_at']
+
+    def get_queryset(self):
+        queryset = EmployeeDocument.objects.select_related(
+            'employee', 'uploaded_by'
+        ).all()
+        employee = self.request.query_params.get('employee')
+        if employee:
+            queryset = queryset.filter(employee_id=employee)
+        doc_type = self.request.query_params.get('document_type')
+        if doc_type:
+            queryset = queryset.filter(document_type=doc_type.upper())
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
 
 
 class LeaveRequestViewSet(viewsets.ModelViewSet):
