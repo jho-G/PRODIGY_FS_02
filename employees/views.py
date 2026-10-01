@@ -1,4 +1,5 @@
 from rest_framework import viewsets, permissions, status, filters
+from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -9,11 +10,33 @@ from django.contrib.auth import login, logout
 from django.http import HttpResponse
 from datetime import datetime, timezone as dt_timezone
 
+from .permissions import (
+    IsAuthenticatedReadOnlyOrStaff,
+    IsHROrAdmin,
+    ROLE_EMPLOYEE,
+    ROLE_MANAGER,
+    get_role,
+    is_direct_manager,
+    is_hr_or_above,
+    is_manager_or_above,
+)
+from .notifications import (
+    notify_document_uploaded,
+    notify_leave_decision,
+    notify_leave_submitted,
+    notify_payslip_generated,
+    notify_review_completed,
+)
+
 from .models import (
     AttendanceRecord,
     Employee,
     Department,
+    EmployeeDocument,
+    EmploymentEvent,
+    Holiday,
     LeaveRequest,
+    Notification,
     PerformanceReview,
     Payslip,
 )
@@ -21,6 +44,10 @@ from .serializers import (
     AttendanceRecordSerializer,
     EmployeeSerializer,
     DepartmentSerializer,
+    EmployeeDocumentSerializer,
+    EmploymentEventSerializer,
+    HolidaySerializer,
+    NotificationSerializer,
     PerformanceReviewSerializer,
     PayslipSerializer,
     UserSerializer,
@@ -47,6 +74,83 @@ class LoginAPIView(APIView):
             'user': UserSerializer(user).data,
             'message': 'Login successful.',
         }, status=status.HTTP_200_OK)
+
+
+class MeAPIView(APIView):
+    """
+    Employee self-service: the logged-in user's own profile, leave history,
+    leave balance, payslips, reviews, documents, and employment timeline.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        profile = getattr(request.user, 'profile', None)
+        employee = profile.employee if profile else None
+        if not employee:
+            return Response(
+                {'detail': 'No employee record is linked to this account.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        leave_requests = employee.leave_requests.all()[:20]
+        payslips = employee.payslips.all()[:12]
+        reviews = employee.performance_reviews.all()[:10]
+        documents = employee.documents.all()[:20]
+        events = employee.employment_events.all()[:20]
+
+        return Response({
+            'employee': EmployeeSerializer(employee).data,
+            'leave_balance': {
+                'entitlement': employee.annual_leave_days,
+                'used': employee.annual_leave_used(),
+                'remaining': employee.annual_leave_remaining,
+            },
+            'leave_requests': LeaveRequestSerializer(leave_requests, many=True).data,
+            'payslips': PayslipSerializer(payslips, many=True).data,
+            'reviews': PerformanceReviewSerializer(reviews, many=True).data,
+            'documents': EmployeeDocumentSerializer(documents, many=True).data,
+            'employment_history': EmploymentEventSerializer(events, many=True).data,
+            'manager': (
+                {
+                    'id': employee.manager.id,
+                    'name': employee.manager.full_name,
+                    'position': employee.manager.position,
+                }
+                if employee.manager else None
+            ),
+        })
+
+
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    In-app notifications for the logged-in user: list, unread count,
+    mark one as read, and mark all as read.
+    """
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['created_at', 'is_read']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        return Notification.objects.filter(recipient=self.request.user)
+
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request):
+        count = self.get_queryset().filter(is_read=False).count()
+        return Response({'unread': count})
+
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        notification = self.get_object()
+        notification.is_read = True
+        notification.save(update_fields=['is_read'])
+        return Response(NotificationSerializer(notification).data)
+
+    @action(detail=False, methods=['post'])
+    def mark_all_read(self, request):
+        updated = self.get_queryset().filter(is_read=False).update(is_read=True)
+        return Response({'marked': updated})
 
 
 class LogoutAPIView(APIView):
@@ -79,13 +183,40 @@ class CurrentUserAPIView(APIView):
 class DepartmentViewSet(viewsets.ModelViewSet):
     """
     CRUD ViewSet for Departments.
+    Reads: any authenticated user. Writes: manager+. Deletes: HR/admin only.
     """
     queryset = Department.objects.all().order_by('name')
     serializer_class = DepartmentSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticatedReadOnlyOrStaff]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'id']
+
+
+class HolidayViewSet(viewsets.ModelViewSet):
+    """
+    CRUD ViewSet for company holidays.
+    Reads: any authenticated user. Writes: HR/admin only.
+    """
+    queryset = Holiday.objects.all().order_by('date')
+    serializer_class = HolidaySerializer
+    permission_classes = [permissions.IsAuthenticated, IsHROrAdmin]
+    filter_backends = [filters.OrderingFilter, filters.SearchFilter]
+    search_fields = ['name', 'description']
+    ordering_fields = ['date', 'name']
+
+    @action(detail=False, methods=['get'])
+    def upcoming(self, request):
+        """List the next N holidays from today (default 5)."""
+        from datetime import date as dt_date
+        try:
+            limit = int(request.query_params.get('limit', 5))
+        except (TypeError, ValueError):
+            limit = 5
+        limit = max(1, min(limit, 50))
+        today = dt_date.today()
+        holidays = self.get_queryset().filter(date__gte=today)[:limit]
+        return Response(HolidaySerializer(holidays, many=True).data)
 
 
 def _filtered_employees(request):
@@ -157,9 +288,11 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     """
     CRUD ViewSet for Employees with search, filtering, soft-delete, statistics,
     payroll metrics, and CSV export.
+    Reads: any authenticated user (company directory).
+    Writes: manager+. Deletes: HR/admin only.
     """
     serializer_class = EmployeeSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticatedReadOnlyOrStaff]
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['first_name', 'last_name', 'hire_date', 'salary', 'created_at', 'employee_id']
     ordering = ['-created_at']
@@ -172,16 +305,74 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         return _filtered_employees(self.request)
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        employee = serializer.save(created_by=self.request.user)
+        # Seed the employment history timeline with the hire event
+        EmploymentEvent.objects.create(
+            employee=employee,
+            event_type='HIRED',
+            effective_date=employee.hire_date,
+            new_department=employee.department,
+            new_position=employee.position,
+            new_salary=employee.salary,
+            notes=f"Joined as {employee.position}.",
+            created_by=self.request.user,
+        )
+
+    def perform_update(self, serializer):
+        """Persist changes and record promotion/transfer/salary events."""
+        original = Employee.objects.get(pk=serializer.instance.pk)
+        employee = serializer.save()
+        events = []
+
+        if original.department_id != employee.department_id:
+            events.append(EmploymentEvent(
+                employee=employee,
+                event_type='TRANSFER',
+                previous_department=original.department,
+                new_department=employee.department,
+                notes=(
+                    f"Moved from {original.department.name if original.department else 'Unassigned'} "
+                    f"to {employee.department.name if employee.department else 'Unassigned'}."
+                ),
+                created_by=self.request.user,
+            ))
+
+        if original.position != employee.position:
+            events.append(EmploymentEvent(
+                employee=employee,
+                event_type='PROMOTION',
+                previous_position=original.position,
+                new_position=employee.position,
+                notes=f"{original.position} → {employee.position}.",
+                created_by=self.request.user,
+            ))
+
+        if original.salary != employee.salary:
+            events.append(EmploymentEvent(
+                employee=employee,
+                event_type='SALARY_CHANGE',
+                previous_salary=original.salary,
+                new_salary=employee.salary,
+                notes=f"Annual salary changed from {original.salary} to {employee.salary}.",
+                created_by=self.request.user,
+            ))
+
+        EmploymentEvent.objects.bulk_create(events)
 
     def perform_destroy(self, instance):
         hard_delete = self.request.query_params.get('hard', '').lower() == 'true'
         if hard_delete:
             instance.delete()
         else:
-            # Soft delete by deactivating
+            # Soft delete by deactivating, recording the exit on the timeline
             instance.is_active = False
             instance.save()
+            EmploymentEvent.objects.create(
+                employee=instance,
+                event_type='EXIT',
+                notes="Deactivated (soft-deleted) in the system.",
+                created_by=self.request.user,
+            )
 
     @action(detail=True, methods=['post'])
     def restore(self, request, pk=None):
@@ -302,9 +493,65 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         }, status=status.HTTP_200_OK)
 
 
+class EmploymentEventViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only employment history timeline per employee. Seeded automatically
+    from employee create/update/delete operations.
+    """
+    serializer_class = EmploymentEventSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['effective_date', 'created_at', 'event_type']
+    ordering = ['-effective_date', '-created_at']
+
+    def get_queryset(self):
+        queryset = EmploymentEvent.objects.select_related(
+            'employee', 'previous_department', 'new_department', 'created_by'
+        ).all()
+        employee = self.request.query_params.get('employee')
+        if employee:
+            queryset = queryset.filter(employee_id=employee)
+        event_type = self.request.query_params.get('event_type')
+        if event_type:
+            queryset = queryset.filter(event_type=event_type.upper())
+        return queryset
+
+
+class EmployeeDocumentViewSet(viewsets.ModelViewSet):
+    """
+    Upload and manage employee documents (contracts, IDs, certificates).
+    Multipart uploads; HR/admin and the owning employee can manage.
+    """
+    serializer_class = EmployeeDocumentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['uploaded_at', 'title', 'document_type']
+    ordering = ['-uploaded_at']
+
+    def get_queryset(self):
+        queryset = EmployeeDocument.objects.select_related(
+            'employee', 'uploaded_by'
+        ).all()
+        employee = self.request.query_params.get('employee')
+        if employee:
+            queryset = queryset.filter(employee_id=employee)
+        doc_type = self.request.query_params.get('document_type')
+        if doc_type:
+            queryset = queryset.filter(document_type=doc_type.upper())
+        return queryset
+
+    def perform_create(self, serializer):
+        document = serializer.save(uploaded_by=self.request.user)
+        notify_document_uploaded(document)
+
+
 class LeaveRequestViewSet(viewsets.ModelViewSet):
     """
     CRUD ViewSet for employee leave requests with approval workflow.
+
+    Visibility: employees see their own requests; managers see their own plus
+    their direct reports'; HR/admin see everything.
+    Approval: HR/admin, or the employee's direct manager.
     """
     serializer_class = LeaveRequestSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -315,6 +562,10 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
     ]
     ordering_fields = ['start_date', 'end_date', 'created_at', 'status']
     ordering = ['-created_at']
+
+    def _own_employee(self):
+        profile = getattr(self.request.user, 'profile', None)
+        return profile.employee if profile else None
 
     def get_queryset(self):
         queryset = LeaveRequest.objects.select_related(
@@ -333,54 +584,143 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         if leave_type:
             queryset = queryset.filter(leave_type=leave_type)
 
+        # Role-based visibility scoping
+        role = get_role(self.request.user)
+        own_employee = self._own_employee()
+        if role == ROLE_EMPLOYEE:
+            queryset = (
+                queryset.filter(employee=own_employee)
+                if own_employee else queryset.none()
+            )
+        elif role == ROLE_MANAGER:
+            if own_employee:
+                queryset = queryset.filter(
+                    Q(employee=own_employee) | Q(employee__manager=own_employee)
+                )
+            else:
+                queryset = queryset.none()
+
         return queryset
+
+    def _can_review(self, leave):
+        """HR/admin can review anyone; managers only their direct reports."""
+        user = self.request.user
+        if is_hr_or_above(user):
+            return True
+        if get_role(user) == ROLE_MANAGER:
+            own_employee = self._own_employee()
+            return bool(own_employee and leave.employee.manager_id == own_employee.id)
+        return False
+
+    def _perform_review(self, leave, new_status):
+        leave.status = new_status
+        # Only manager-level reviewers are recorded as the decision maker
+        if self._can_review(leave):
+            leave.reviewed_by = self.request.user
+            leave.reviewed_at = datetime.now()
+        leave.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+        return leave
+
+    def perform_create(self, serializer):
+        """Auto-assign the employee for self-service requests, then notify."""
+        employee_param = self.request.data.get('employee')
+        role = get_role(self.request.user)
+        own_employee = self._own_employee()
+
+        if employee_param and role == ROLE_EMPLOYEE:
+            if not own_employee or int(employee_param) != own_employee.id:
+                raise ValidationError(
+                    {'employee': 'You can only submit leave requests for yourself.'}
+                )
+
+        if not employee_param:
+            if not own_employee:
+                raise ValidationError(
+                    {'employee': 'No employee record is linked to your account; '
+                                 'pass an explicit employee id.'}
+                )
+            leave = serializer.save(employee=own_employee)
+        else:
+            leave = serializer.save()
+        notify_leave_submitted(leave)
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """Approve a pending leave request."""
+        """Approve a pending leave request (manager of the employee, HR, or admin)."""
         leave = self.get_object()
+        if not self._can_review(leave):
+            return Response(
+                {'detail': 'You can only approve leave for your direct reports.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if leave.status != 'PENDING':
             return Response(
                 {'detail': f'Only pending requests can be approved (current: {leave.status}).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        leave.status = 'APPROVED'
-        leave.reviewed_by = request.user
-        leave.save(update_fields=['status', 'reviewed_by', 'updated_at'])
+        # Enforce the employee's annual vacation entitlement before approving
+        if leave.leave_type == 'VL':
+            employee = leave.employee
+            already_used = employee.annual_leave_used()
+            if leave.leave_days > employee.annual_leave_days - already_used:
+                return Response(
+                    {
+                        'detail': (
+                            f'Insufficient leave balance: {leave.leave_days} working days requested, '
+                            f'{employee.annual_leave_days - already_used} of '
+                            f'{employee.annual_leave_days} remaining.'
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        leave = self._perform_review(leave, 'APPROVED')
+        notify_leave_decision(leave)
         return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        """Reject a pending leave request."""
+        """Reject a pending leave request (manager of the employee, HR, or admin)."""
         leave = self.get_object()
+        if not self._can_review(leave):
+            return Response(
+                {'detail': 'You can only reject leave for your direct reports.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if leave.status != 'PENDING':
             return Response(
                 {'detail': f'Only pending requests can be rejected (current: {leave.status}).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        leave.status = 'REJECTED'
-        leave.reviewed_by = request.user
-        leave.save(update_fields=['status', 'reviewed_by', 'updated_at'])
+        leave = self._perform_review(leave, 'REJECTED')
+        notify_leave_decision(leave)
         return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
-        """Cancel an approved leave request."""
+        """Cancel an approved leave request (owner, manager of the owner, HR, or admin)."""
         leave = self.get_object()
+        own_employee = self._own_employee()
+        is_owner = own_employee and leave.employee_id == own_employee.id
+        if not (is_owner or self._can_review(leave)):
+            return Response(
+                {'detail': 'You can only cancel your own leave or that of your direct reports.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if leave.status != 'APPROVED':
             return Response(
                 {'detail': f'Only approved requests can be cancelled (current: {leave.status}).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        leave.status = 'CANCELLED'
-        leave.reviewed_by = request.user
-        leave.save(update_fields=['status', 'reviewed_by', 'updated_at'])
+        leave = self._perform_review(leave, 'CANCELLED')
+        notify_leave_decision(leave)
         return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
 
 
 class AttendanceViewSet(viewsets.ModelViewSet):
     """
     CRUD ViewSet for daily attendance records with check-in/out actions.
+    Employees are scoped to their own records; manager+ see everyone's.
     """
     serializer_class = AttendanceRecordSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -394,6 +734,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         employee = self.request.query_params.get('employee')
         if employee:
             queryset = queryset.filter(employee_id=employee)
+
+        # Employees see only their own attendance
+        if get_role(self.request.user) == ROLE_EMPLOYEE:
+            profile = getattr(self.request.user, 'profile', None)
+            own_employee = profile.employee if profile else None
+            queryset = queryset.filter(employee=own_employee) if own_employee else queryset.none()
 
         date_param = self.request.query_params.get('date')
         if date_param:
@@ -497,6 +843,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 class PayslipViewSet(viewsets.ModelViewSet):
     """
     CRUD ViewSet for monthly payslips with bulk payroll generation.
+    Employees are scoped to their own payslips; manager+ see everyone's.
     """
     serializer_class = PayslipSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -512,6 +859,12 @@ class PayslipViewSet(viewsets.ModelViewSet):
         employee = self.request.query_params.get('employee')
         if employee:
             queryset = queryset.filter(employee_id=employee)
+
+        # Employees see only their own payslips
+        if get_role(self.request.user) == ROLE_EMPLOYEE:
+            profile = getattr(self.request.user, 'profile', None)
+            own_employee = profile.employee if profile else None
+            queryset = queryset.filter(employee=own_employee) if own_employee else queryset.none()
 
         department = self.request.query_params.get('department')
         if department:
@@ -565,6 +918,7 @@ class PayslipViewSet(viewsets.ModelViewSet):
                     'currency': emp.currency or 'USD',
                 },
             )
+            notify_payslip_generated(payslip)
             created_count += 1 if created else 0
             updated_count += 0 if created else 1
         
@@ -574,6 +928,43 @@ class PayslipViewSet(viewsets.ModelViewSet):
             'updated': updated_count,
             'total': created_count + updated_count,
         }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='export')
+    def export(self, request):
+        """Export payslips (filtered by year/month/department) as CSV."""
+        import csv
+
+        payslips = self.get_queryset().order_by('period_year', 'period_month', 'employee__employee_id')
+
+        response = HttpResponse(content_type='text/csv')
+        filename = f"payroll_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        writer = csv.writer(response)
+        writer.writerow([
+            'Employee ID', 'Employee Name', 'Department', 'Period',
+            'Basic Salary', 'Allowances', 'Bonus', 'Gross Pay',
+            'Tax', 'Other Deductions', 'Total Deductions',
+            'Net Pay', 'Currency', 'Generated At',
+        ])
+        for slip in payslips:
+            writer.writerow([
+                slip.employee.employee_id,
+                slip.employee.full_name,
+                slip.employee.department.name if slip.employee.department else '',
+                slip.period_label,
+                slip.basic_salary,
+                slip.allowances,
+                slip.bonus,
+                slip.gross_pay,
+                slip.tax_deduction,
+                slip.other_deductions,
+                slip.total_deductions,
+                slip.net_pay,
+                slip.currency,
+                slip.generated_at.strftime('%Y-%m-%d %H:%M'),
+            ])
+        return response
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
@@ -651,6 +1042,12 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
         if period:
             queryset = queryset.filter(review_period__icontains=period)
 
+        # Employees see only their own reviews
+        if get_role(self.request.user) == ROLE_EMPLOYEE:
+            profile = getattr(self.request.user, 'profile', None)
+            own_employee = profile.employee if profile else None
+            queryset = queryset.filter(employee=own_employee) if own_employee else queryset.none()
+
         return queryset
 
     @action(detail=True, methods=['post'])
@@ -665,6 +1062,7 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
         review.status = 'COMPLETED'
         review.reviewer = request.user
         review.save(update_fields=['status', 'reviewer', 'updated_at'])
+        notify_review_completed(review)
         return Response(PerformanceReviewSerializer(review).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
