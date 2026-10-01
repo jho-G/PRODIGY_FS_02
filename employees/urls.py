@@ -11,11 +11,13 @@ from .views import (
     LoginAPIView,
     LogoutAPIView,
     CurrentUserAPIView,
+    NotificationViewSet,
     PerformanceReviewViewSet,
     PayslipViewSet,
 )
 
 router = DefaultRouter()
+router.register(r'notifications', NotificationViewSet, basename='notification')
 router.register(r'documents', EmployeeDocumentViewSet, basename='employee-document')
 router.register(r'employment-events', EmploymentEventViewSet, basename='employment-event')
 router.register(r'holidays', HolidayViewSet, basename='holiday')

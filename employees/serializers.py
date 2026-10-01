@@ -9,6 +9,7 @@ from .models import (
     EmploymentEvent,
     Holiday,
     LeaveRequest,
+    Notification,
     PerformanceReview,
     Payslip,
 )
@@ -123,6 +124,13 @@ class EmploymentEventSerializer(serializers.ModelSerializer):
             'created_by', 'created_by_username', 'created_at',
         ]
         read_only_fields = [field for field in fields]
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'verb', 'description', 'link', 'is_read', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
 
 class HolidaySerializer(serializers.ModelSerializer):
