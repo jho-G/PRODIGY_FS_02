@@ -1,6 +1,6 @@
-# Employee Management System (EMS) — Backend API (Django & DRF)
+# Employee Management System (EMS) — Full-Stack App (Django + React)
 
-A robust, scalable RESTful API built with **Django** and **Django REST Framework (DRF)** to power an Employee Management System. This API serves as the core backend service, featuring token-based authentication, CRUD operations, dynamic search, multi-criteria filtering, soft-delete capabilities, and statistical metrics ready for integration with a **React.js** frontend.
+A robust, production-hardened full-stack Employee Management System built with **Django REST Framework** (backend) and **React + Vite** (frontend). Features **JWT authentication** with access/refresh token rotation, role-based access control, rate limiting, security headers, CORS protection, and a rich HR feature set — all containerized with Docker.
 
 ---
 
@@ -16,8 +16,12 @@ The **Employee Management System (EMS)** backend is designed for HR personnel, t
   - Django REST Framework's interactive Browsable API for in-browser testing and exploration.
 
 - **Authentication & Security:**
-  - Token-based authentication (`rest_framework.authtoken`) for secure API client access.
-  - Endpoints for user login, logout, and fetching current authenticated profile data.
+  - **JWT Authentication** (`djangorestframework-simplejwt`): short-lived access tokens (15 min) + long-lived refresh tokens (7 days) with automatic rotation and blacklisting on logout.
+  - **Custom JWT claims**: role, username, email, and employee_id are embedded in the token payload — no extra roundtrips needed.
+  - **Rate limiting**: `django-ratelimit` (5 attempts/min/IP on login) + DRF throttling (100/day anonymous, 2000/day authenticated).
+  - **Security headers**: HSTS, X-Frame-Options (DENY), X-Content-Type-Options, XSS protection.
+  - **Env-based config**: `python-decouple` — no secrets hardcoded; all settings driven from `.env` (see `.env.example`).
+  - **Strict CORS**: only explicit allowed origins in production; `CORS_ALLOW_ALL_ORIGINS` only in development.
   - Automatic attribution: each employee record tracks who created it (`created_by`).
 
 - **Department & Employee Resource Management:**
@@ -34,11 +38,82 @@ The **Employee Management System (EMS)** backend is designed for HR personnel, t
 
 ## 🛠️ Technology Stack
 
-- **Framework:** Django 5.x, Django REST Framework (DRF) 3.15+
-- **CORS Handling:** `django-cors-headers`
-- **Authentication:** Token & Session Authentication (`rest_framework.authtoken`)
-- **Database:** SQLite (default for development; compatible with PostgreSQL/MySQL)
-- **Language:** Python 3.10+
+| Layer | Technology |
+|---|---|
+| **Backend Framework** | Django 5.x, Django REST Framework 3.15+ |
+| **Authentication** | `djangorestframework-simplejwt` (JWT access + refresh tokens) |
+| **Rate Limiting** | `django-ratelimit` + DRF throttling |
+| **Environment Config** | `python-decouple` |
+| **CORS** | `django-cors-headers` |
+| **Database** | SQLite (dev) · PostgreSQL-compatible |
+| **Frontend** | React 18 + Vite |
+| **Web Server** | Nginx (reverse proxy + SSL termination) |
+| **App Server** | Gunicorn (multi-worker) |
+| **Containerization** | Docker + Docker Compose |
+| **Language** | Python 3.11+, JavaScript (ES2022) |
+
+---
+
+## 🔐 Security & Authentication
+
+### JWT Authentication Flow
+
+This project uses **JSON Web Tokens** (via `djangorestframework-simplejwt`) instead of the legacy DRF Token auth.
+
+```
+Client              Backend
+  │                    │
+  │─── POST /api/auth/login/ {username, password} ──→│
+  │←── {access, refresh, user} ─────────────────────│
+  │                    │
+  │   (access token expires in 15 min)
+  │                    │
+  │─── POST /api/auth/token/refresh/ {refresh} ──────→│
+  │←── {access, refresh} ──────────────────────────  │
+  │                    │
+  │   (refresh token expires in 7 days)
+  │   (old refresh is blacklisted — cannot be reused)
+  │                    │
+  │─── POST /api/auth/logout/ {refresh} ─────────────→│
+  │←── {message: "Logged out successfully."} ─────── │
+```
+
+### Auth API Endpoints
+
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|--------------|-------------|
+| `POST` | `/api/auth/login/` | ❌ | Exchange credentials for JWT pair |
+| `POST` | `/api/auth/token/refresh/` | ❌ | Rotate refresh → new access token |
+| `POST` | `/api/auth/token/verify/` | ❌ | Validate any token |
+| `POST` | `/api/auth/logout/` | ✅ Bearer | Blacklist refresh token |
+| `GET` | `/api/auth/user/` | ✅ Bearer | Current user info |
+| `GET` | `/api/auth/me/` | ✅ Bearer | Full employee self-service profile |
+
+### Environment Configuration
+
+Copy `.env.example` to `.env` and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+Key variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SECRET_KEY` | — | Django secret key (generate with `python -c "import secrets; print(secrets.token_urlsafe(50))"`) |
+| `DEBUG` | `False` | Enable Django debug mode |
+| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma-separated allowed hosts |
+| `JWT_ACCESS_TOKEN_LIFETIME_MINUTES` | `15` | Access token lifetime in minutes |
+| `JWT_REFRESH_TOKEN_LIFETIME_DAYS` | `7` | Refresh token lifetime in days |
+| `CORS_ALLOWED_ORIGINS` | — | Comma-separated allowed frontend origins (prod) |
+| `SECURE_SSL_REDIRECT` | `False` | Redirect HTTP → HTTPS in production |
+
+### Rate Limiting
+
+- **Login endpoint**: max **5 attempts per minute per IP** (`django-ratelimit`). Returns `429 Too Many Requests` when exceeded.
+- **All anonymous endpoints**: **100 requests/day** (DRF throttling).
+- **Authenticated endpoints**: **2000 requests/day** per user.
 
 ---
 
@@ -145,6 +220,121 @@ The API will be accessible at: **`http://127.0.0.1:8000/api/`**
     ```bash
     python3 manage.py runserver
     ```
+
+---
+
+## 🖥️ Running the Frontend (Development Mode)
+
+The React frontend is a **Vite** app. For active development, run the Django backend and the Vite dev server side-by-side with hot reload.
+
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v20+)
+- `npm`
+
+### Step 1: Start the Backend First
+
+With your virtual environment active and migrations applied (see backend steps above), run in one terminal:
+
+```bash
+python manage.py runserver
+```
+
+The API will be available at `http://127.0.0.1:8000/api/`.
+
+### Step 2: Install Frontend Dependencies
+
+In a **second terminal**:
+
+```bash
+cd frontend
+npm install
+```
+
+### Step 3: Start the Vite Dev Server
+
+```bash
+npm run dev
+```
+
+The app will open at **[https://localhost:5173](https://localhost:5173)** (Vite will serve HTTPS because dev certificates exist in `frontend/ssl/`; visit `http://localhost:5173` if your browser blocks the self-signed cert).
+
+> **Note — API base URL:** The frontend reads `VITE_API_URL` from `frontend/.env` (see `src/api/client.js`) and falls back to `http://127.0.0.1:8000/api/`. In dev mode you normally don't need to set anything — just make sure the Django server is running. If your API runs elsewhere, create `frontend/.env`:
+>
+> ```env
+> VITE_API_URL=http://127.0.0.1:8000/api/
+> ```
+
+### Step 4: Log In
+
+Open the app in your browser and sign in with the superuser credentials created in **Step 5** of the backend setup (or see the Mock Data section below to seed demo employees first).
+
+### Useful Frontend Commands
+
+```bash
+cd frontend
+npm run dev      # start Vite dev server with hot reload
+npm run build    # production build (outputs to dist/)
+npm run preview  # preview the production build locally
+npm run lint     # lint with oxlint
+```
+
+### 🔍 Verifying Both Apps Are Running
+
+| Check | How | Expected |
+|---|---|---|
+| Backend API | Open `http://127.0.0.1:8000/api/` | DRF Browsable API page (JSON/HTML) |
+| Backend admin | Open `http://127.0.0.1:8000/admin/` | Django admin login page |
+| Frontend | Open the Vite URL (`https://localhost:5173`) | React login page renders |
+| End-to-end | Log in via the React app | Redirects to Dashboard with live stats |
+
+You can also smoke-test the API from the terminal:
+
+```bash
+# Login request (returns your auth token)
+curl -X POST http://127.0.0.1:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "<your_username>", "password": "<your_password>"}'
+
+# List employees using the token from the login response
+curl http://127.0.0.1:8000/api/employees/ \
+  -H "Authorization: Token <your_token_here>"
+```
+
+---
+
+## ✅ Running the Test Suite
+
+The backend ships with a full API and model test suite in `employees/tests.py` covering authentication, departments, employees, leave requests, attendance, payslips, and performance reviews.
+
+### Run Backend Tests
+
+With your virtual environment active:
+
+```bash
+python manage.py test employees -v 2
+```
+
+Expected output ends with:
+
+```text
+OK
+```
+
+### Lint the Frontend
+
+```bash
+cd frontend
+npm run lint
+```
+
+### Verify a Production Build Compiles
+
+```bash
+cd frontend
+npm run build
+```
+
+A successful build finishes with `✓ built in <time>` and writes static assets to `frontend/dist/`.
 
 ---
 
@@ -377,6 +567,7 @@ PRODIGY_FS_02/
 │   ├── serializers.py          # DRF serializers for all resources
 │   ├── urls.py                 # DRF DefaultRouter and auth routing
 │   ├── admin.py                # Django admin registrations for all models
+│   ├── tests.py                # API & model test suite for all EMS resources
 │   ├── management/commands/seed_employees.py  # Mock data seeder
 │   └── views.py                # ViewSets (Employee, Department, Leave, Attendance, Payslip, PerformanceReview) and Auth APIViews
 └── frontend/                   # React Single Page Application (Vite)
