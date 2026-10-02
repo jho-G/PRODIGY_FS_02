@@ -1,7 +1,7 @@
 services:
-  # ==========================================
+  # ============================================================
   # Django REST Framework Backend Service
-  # ==========================================
+  # ============================================================
   backend:
     build:
       context: .
@@ -12,15 +12,27 @@ services:
       - "8000:8000"
     volumes:
       # Persist SQLite database file between container restarts
+      # In production, replace with a PostgreSQL service volume
       - ./db.sqlite3:/app/db.sqlite3
+      # Persist user-uploaded documents
+      - ./media:/app/media
+    env_file:
+      # Load all settings from .env — create this from .env.example
+      - .env
     environment:
       - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/auth/token/verify/", "-X", "POST", "-d", "{}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks:
       - ems_network
 
-  # ==========================================
+  # ============================================================
   # React + Nginx Frontend Service
-  # ==========================================
+  # ============================================================
   frontend:
     build:
       context: ./frontend
@@ -35,7 +47,8 @@ services:
       # Mount SSL certificate and private key securely into Nginx
       - ./frontend/ssl:/etc/nginx/ssl:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - ems_network
 
