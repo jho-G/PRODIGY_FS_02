@@ -4,14 +4,46 @@ import api from './client';
  * Authentication Endpoints
  */
 export const authApi = {
+  /**
+   * Exchange credentials for a JWT access + refresh token pair.
+   * Returns: { access, refresh, user, message }
+   */
   login: async (credentials) => {
     const response = await api.post('auth/login/', credentials);
     return response.data;
   },
-  logout: async () => {
-    const response = await api.post('auth/logout/');
+
+  /**
+   * Blacklist the given refresh token, invalidating the session server-side.
+   * @param {string} refreshToken - The refresh token to blacklist
+   */
+  logout: async (refreshToken) => {
+    const response = await api.post('auth/logout/', { refresh: refreshToken });
     return response.data;
   },
+
+  /**
+   * Exchange a refresh token for a new access token (and rotated refresh token).
+   * Returns: { access, refresh }
+   */
+  refreshToken: async (refreshToken) => {
+    const response = await api.post('auth/token/refresh/', { refresh: refreshToken });
+    return response.data;
+  },
+
+  /**
+   * Verify that a token (access or refresh) is still valid.
+   * Returns 200 if valid, 401 if expired or blacklisted.
+   */
+  verifyToken: async (token) => {
+    const response = await api.post('auth/token/verify/', { token });
+    return response.data;
+  },
+
+  /**
+   * Fetch the current authenticated user's details.
+   * Returns: { id, username, email, first_name, last_name, role, employee_id }
+   */
   getCurrentUser: async () => {
     const response = await api.get('auth/user/');
     return response.data;
@@ -89,6 +121,98 @@ export const employeeApi = {
     return response.data;
   },
 };
+
+/**
+ * Holiday Endpoints
+ */
+export const holidayApi = {
+  getAll: async (params = {}) => {
+    const response = await api.get('holidays/', { params });
+    return response.data;
+  },
+  create: async (data) => {
+    const response = await api.post('holidays/', data);
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await api.delete(`holidays/${id}/`);
+    return response.data;
+  },
+  getUpcoming: async (limit = 5) => {
+    const response = await api.get('holidays/upcoming/', { params: { limit } });
+    return response.data;
+  },
+};
+
+/**
+ * Employment History Endpoints
+ */
+export const historyApi = {
+  // Supports query params: { employee, event_type, ordering }
+  getAll: async (params = {}) => {
+    const response = await api.get('employment-events/', { params });
+    return response.data;
+  },
+};
+
+/**
+ * Employee Document Endpoints (multipart upload)
+ */
+export const documentApi = {
+  // Supports query params: { employee, document_type, ordering }
+  getAll: async (params = {}) => {
+    const response = await api.get('documents/', { params });
+    return response.data;
+  },
+  upload: async (formData) => {
+    const response = await api.post('documents/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await api.delete(`documents/${id}/`);
+    return response.data;
+  },
+};
+
+/**
+ * Notification Endpoints
+ */
+export const notificationApi = {
+  getAll: async (params = {}) => {
+    const response = await api.get('notifications/', { params });
+    return response.data;
+  },
+  getUnreadCount: async () => {
+    const response = await api.get('notifications/unread_count/');
+    return response.data;
+  },
+  markRead: async (id) => {
+    const response = await api.post(`notifications/${id}/mark_read/`);
+    return response.data;
+  },
+  markAllRead: async () => {
+    const response = await api.post('notifications/mark_all_read/');
+    return response.data;
+  },
+};
+
+/**
+ * Employee Self-Service Endpoints
+ */
+export const selfServiceApi = {
+  // Returns profile, leave balance, leave history, payslips, reviews,
+  // documents, manager, and employment history for the logged-in employee
+  getMe: async () => {
+    const response = await api.get('auth/me/');
+    return response.data;
+  },
+};
+
+/**
+ * Payroll Export
+ */
 
 /**
  * Leave Request Endpoints
@@ -202,6 +326,14 @@ export const payrollApi = {
   // Supports query params: { year, month }
   getSummary: async (params = {}) => {
     const response = await api.get('payslips/summary/', { params });
+    return response.data;
+  },
+  // Downloads the filtered payslip set as a CSV file
+  exportCsv: async (params = {}) => {
+    const response = await api.get('payslips/export/', {
+      params,
+      responseType: 'blob',
+    });
     return response.data;
   },
 };

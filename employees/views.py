@@ -3,11 +3,13 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.authtoken.models import Token
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 from django.db.models import Count, Q, Sum, Avg, Max, F, Value, DecimalField
 from django.db.models.functions import Coalesce
-from django.contrib.auth import login, logout
 from django.http import HttpResponse
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from datetime import datetime, timezone as dt_timezone
 
 from .permissions import (
@@ -56,21 +58,57 @@ from .serializers import (
 )
 
 
+class EMSRefreshToken(RefreshToken):
+    """
+    Custom JWT refresh token that embeds EMS-specific claims in the access token.
+
+    Adding role, username, and employee_id directly to the access token payload
+    lets the frontend read these fields by decoding the JWT locally, avoiding an
+    extra round-trip to /api/auth/user/ on every page load.
+    """
+
+    @classmethod
+    def for_user(cls, user):
+        token = super().for_user(user)
+
+        # Embed role from UserProfile (defaults to 'EMPLOYEE' if no profile)
+        profile = getattr(user, 'profile', None)
+        token['role'] = profile.role if profile else 'EMPLOYEE'
+        token['username'] = user.username
+        token['email'] = user.email
+        token['full_name'] = f"{user.first_name} {user.last_name}".strip() or user.username
+        # Employee record ID (null for pure admin/HR accounts without an employee record)
+        token['employee_id'] = profile.employee_id if profile else None
+
+        return token
+
+
 class LoginAPIView(APIView):
     """
-    User login endpoint returning Token for API authentication.
+    User login endpoint.
+    Returns a JWT access token (short-lived) and a refresh token (long-lived).
+    Rate-limited to 5 POST requests per minute per IP to prevent brute-force.
+    The client should store the refresh token securely and use it to obtain
+    new access tokens via /api/auth/token/refresh/ before expiry.
     """
     permission_classes = [permissions.AllowAny]
 
+    @method_decorator(
+        ratelimit(key='ip', rate='5/m', method='POST', block=True),
+        name='dispatch',
+    )
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
-        login(request, user)
-        token, _ = Token.objects.get_or_create(user=user)
+
+        # Generate JWT token pair with embedded EMS claims (role, username, employee_id)
+        refresh = EMSRefreshToken.for_user(user)
+        access = refresh.access_token
 
         return Response({
-            'token': token.key,
+            'access': str(access),
+            'refresh': str(refresh),
             'user': UserSerializer(user).data,
             'message': 'Login successful.',
         }, status=status.HTTP_200_OK)
@@ -155,18 +193,29 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
 
 class LogoutAPIView(APIView):
     """
-    User logout endpoint destroying current token.
+    User logout endpoint.
+    Expects the client to send the refresh token in the request body.
+    The refresh token is blacklisted, preventing any further token refreshes.
+    The client must also discard the stored access token.
     """
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        # Delete token if exists
+        refresh_token = request.data.get('refresh')
+        if not refresh_token:
+            return Response(
+                {'detail': 'Refresh token is required for logout.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
-            request.user.auth_token.delete()
-        except (AttributeError, Token.DoesNotExist):
-            pass
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except TokenError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        logout(request)
         return Response({'message': 'Logged out successfully.'}, status=status.HTTP_200_OK)
 
 

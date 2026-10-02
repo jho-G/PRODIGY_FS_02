@@ -27,3 +27,8 @@ venv.bak/
 
 # Project specific
 *.sqlite3
+
+# Environment variables — never commit real secrets
+.env
+# But do track the example template:
+!.env.example
