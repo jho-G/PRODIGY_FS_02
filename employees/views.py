@@ -58,6 +58,31 @@ from .serializers import (
 )
 
 
+class EMSRefreshToken(RefreshToken):
+    """
+    Custom JWT refresh token that embeds EMS-specific claims in the access token.
+
+    Adding role, username, and employee_id directly to the access token payload
+    lets the frontend read these fields by decoding the JWT locally, avoiding an
+    extra round-trip to /api/auth/user/ on every page load.
+    """
+
+    @classmethod
+    def for_user(cls, user):
+        token = super().for_user(user)
+
+        # Embed role from UserProfile (defaults to 'EMPLOYEE' if no profile)
+        profile = getattr(user, 'profile', None)
+        token['role'] = profile.role if profile else 'EMPLOYEE'
+        token['username'] = user.username
+        token['email'] = user.email
+        token['full_name'] = f"{user.first_name} {user.last_name}".strip() or user.username
+        # Employee record ID (null for pure admin/HR accounts without an employee record)
+        token['employee_id'] = profile.employee_id if profile else None
+
+        return token
+
+
 class LoginAPIView(APIView):
     """
     User login endpoint.
@@ -77,8 +102,8 @@ class LoginAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
 
-        # Generate JWT token pair for the authenticated user
-        refresh = RefreshToken.for_user(user)
+        # Generate JWT token pair with embedded EMS claims (role, username, employee_id)
+        refresh = EMSRefreshToken.for_user(user)
         access = refresh.access_token
 
         return Response({
