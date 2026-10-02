@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
 from .views import (
     AttendanceViewSet,
     DepartmentViewSet,
@@ -30,12 +31,22 @@ router.register(r'payslips', PayslipViewSet, basename='payslip')
 router.register(r'performance-reviews', PerformanceReviewViewSet, basename='performance-review')
 
 urlpatterns = [
+    # -----------------------------------------------------------------------
     # Authentication endpoints
+    # -----------------------------------------------------------------------
+    # Custom login: validates credentials, returns JWT access + refresh tokens
     path('auth/login/', LoginAPIView.as_view(), name='api_login'),
-    path('auth/me/', MeAPIView.as_view(), name='api_me'),
+    # simplejwt: silently refresh expired access token using refresh token
+    path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    # simplejwt: verify any token is still valid (useful for client-side guard)
+    path('auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
+    # Blacklist refresh token on logout
     path('auth/logout/', LogoutAPIView.as_view(), name='api_logout'),
+    # Self-service: full employee profile for the currently logged-in user
+    path('auth/me/', MeAPIView.as_view(), name='api_me'),
+    # Raw Django user object (id, username, email, role)
     path('auth/user/', CurrentUserAPIView.as_view(), name='api_user'),
 
-    # DRF Router endpoints (/api/departments/, /api/employees/)
+    # DRF Router endpoints (/api/departments/, /api/employees/, etc.)
     path('', include(router.urls)),
 ]
