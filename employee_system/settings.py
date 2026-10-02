@@ -138,7 +138,26 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ],
+    # DRF built-in throttling — second layer of rate limiting on top of django-ratelimit
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/day',     # unauthenticated callers
+        'user': '2000/day',    # authenticated users
+    },
 }
+
+# django-ratelimit uses Django's cache framework; default cache is in-memory.
+# In production, switch to Redis: django.core.cache.backends.redis.RedisCache
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'ems-ratelimit-cache',
+    }
+}
+RATELIMIT_USE_CACHE = 'default'
 
 # ---------------------------------------------------------------------------
 # JWT Configuration (djangorestframework-simplejwt)

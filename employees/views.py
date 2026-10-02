@@ -8,6 +8,8 @@ from rest_framework_simplejwt.exceptions import TokenError
 from django.db.models import Count, Q, Sum, Avg, Max, F, Value, DecimalField
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from datetime import datetime, timezone as dt_timezone
 
 from .permissions import (
@@ -60,11 +62,16 @@ class LoginAPIView(APIView):
     """
     User login endpoint.
     Returns a JWT access token (short-lived) and a refresh token (long-lived).
+    Rate-limited to 5 POST requests per minute per IP to prevent brute-force.
     The client should store the refresh token securely and use it to obtain
     new access tokens via /api/auth/token/refresh/ before expiry.
     """
     permission_classes = [permissions.AllowAny]
 
+    @method_decorator(
+        ratelimit(key='ip', rate='5/m', method='POST', block=True),
+        name='dispatch',
+    )
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
