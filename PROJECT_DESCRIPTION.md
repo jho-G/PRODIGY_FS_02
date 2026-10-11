@@ -276,3 +276,113 @@ In-app operational and system alert dispatch.
 - `is_read` (`BooleanField`, default=False, indexed): Read state flag.
 - `link` (`CharField`, max_length=255, blank=True): Client-side routing path (e.g., `/leaves/12`).
 
+---
+
+## 5. Authentication, Authorization & RBAC Matrix
+
+### 5.1 JSON Web Token (JWT) Architecture
+
+The application has migrated away from legacy stateful session authentication to stateless cryptographically verified JSON Web Tokens powered by `djangorestframework-simplejwt`.
+
+```
+                       JWT Token Exchange & Lifecycle
+                       
+   [ Client Browser ]                                  [ EMS Django Backend ]
+          │                                                       │
+   (1)    │── POST /api/auth/login/ {username, password} ─────────│
+          │                                                       │ (Validates credentials)
+          │                                                       │ (Generates custom claims)
+   (2)    │◀─ 200 OK {access: "<jwt>", refresh: "<jwt>", user} ───│
+          │                                                       │
+     [Stores tokens]                                              │
+     [Sets Authorization: Bearer <access>]                        │
+          │                                                       │
+   (3)    │── GET /api/employees/ [Bearer access] ────────────────│
+          │◀─ 200 OK [Data payload] ──────────────────────────────│
+          │                                                       │
+     (15 mins elapse -> access token expires)                     │
+          │                                                       │
+   (4)    │── GET /api/leaves/ [Expired access] ──────────────────│
+          │◀─ 401 Unauthorized (token_not_valid) ─────────────────│
+          │                                                       │
+   (5)    │── POST /api/auth/token/refresh/ {refresh: "<jwt>"} ───│
+          │                                                       │ (Rotates token)
+          │                                                       │ (Blacklists old refresh)
+   (6)    │◀─ 200 OK {access: "<new_jwt>", refresh: "<new_jwt>"} ─│
+          │                                                       │
+   (7)    │── Re-attempts original request with new access token ─│
+          │◀─ 200 OK [Data payload] ──────────────────────────────│
+          │                                                       │
+   (8)    │── POST /api/auth/logout/ {refresh: "<jwt>"} ──────────│
+          │                                                       │ (Blacklists refresh)
+          │◀─ 200 OK {"message": "Logged out successfully."} ─────│
+```
+
+#### Custom Token Payload (`EMSRefreshToken`)
+Rather than forcing the client to make secondary network roundtrips to identify the user's role and associated employee record, the backend generates a customized token embedding essential identity claims:
+
+```json
+{
+  "token_type": "access",
+  "exp": 1791730800,
+  "iat": 1791729900,
+  "jti": "8f3b25e79b9b4f988220021c3b17c1bf",
+  "user_id": 4,
+  "username": "sarah_connor",
+  "email": "sarah@acme.corp",
+  "role": "HR",
+  "employee_id": "EMP-1042",
+  "department_id": 2
+}
+```
+
+### 5.2 Role-Based Access Control (RBAC) Matrix
+
+The system enforces a 4-tier hierarchical access model:
+
+| Module / Operation | Admin | HR | Manager | Employee |
+|---|:---:|:---:|:---:|:---:|
+| **Authentication & Profile Self-Service** |
+| Login / Refresh / Logout | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| View own profile (`/api/auth/me/`) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Update own password | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Department Management** |
+| List departments & employee counts | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Create / Update department details | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| Delete department | :white_check_mark: | :x: | :x: | :x: |
+| **Employee Directory** |
+| View employee directory & public profiles | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| View confidential data (salary, tax ID, bank) | :white_check_mark: | :white_check_mark: | :x: | Self only |
+| Create new employee record | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| Update employee details | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| Soft-deactivate employee (`is_active=False`) | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| Permanent hard-delete (`?hard=true`) | :white_check_mark: | :x: | :x: | :x: |
+| Export employee list to CSV | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| Workforce analytics (`/api/employees/stats/`)| :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
+| **Leave Management** |
+| Submit leave request | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: (own) |
+| Cancel own pending leave | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: (own) |
+| Approve / Reject leave requests | :white_check_mark: | :white_check_mark: | :white_check_mark: (direct reports) | :x: |
+| View all organization leave requests | :white_check_mark: | :white_check_mark: | Direct reports only | Self only |
+| **Attendance & Timekeeping** |
+| Daily Clock-in / Clock-out | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: (own) |
+| View own attendance records | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: (own) |
+| View team attendance summary | :white_check_mark: | :white_check_mark: | Direct reports only | :x: |
+| Override / Edit attendance logs | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| **Payroll & Payslips** |
+| View own monthly payslips | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: (own) |
+| Generate bulk monthly payslips | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| Mark payslip as paid / adjust salary items | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| View organization payroll totals | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| **Performance Reviews** |
+| Create / Conduct performance evaluation | :white_check_mark: | :white_check_mark: | :white_check_mark: (direct reports) | :x: |
+| Complete review and finalize score | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
+| Acknowledge review feedback | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: (reviewed employee) |
+| Organization performance metrics | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| **Documents & Holidays** |
+| Upload employee contracts & records | :white_check_mark: | :white_check_mark: | :x: | :x: |
+| Download own employee documents | :white_check_mark: | :white_check_mark: | :x: | Self only |
+| View organization holiday calendar | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Add / Delete company holidays | :white_check_mark: | :white_check_mark: | :x: | :x: |
+
+
