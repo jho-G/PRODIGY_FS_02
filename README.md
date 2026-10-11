@@ -327,51 +327,51 @@ npm run lint     # lint with oxlint
 You can also smoke-test the API from the terminal:
 
 ```bash
-# Login request (returns your auth token)
+# 1. Login request (returns JWT access & refresh token pair)
 curl -X POST http://127.0.0.1:8000/api/auth/login/ \
   -H "Content-Type: application/json" \
   -d '{"username": "<your_username>", "password": "<your_password>"}'
 
-# List employees using the token from the login response
+# 2. List employees using the Bearer token from the login response
 curl http://127.0.0.1:8000/api/employees/ \
-  -H "Authorization: Token <your_token_here>"
+  -H "Authorization: Bearer <your_access_token_here>"
 ```
 
 ---
 
-## ✅ Running the Test Suite
+## ✅ Running the Test Suite & Linters
 
-The backend ships with a full API and model test suite in `employees/tests.py` covering authentication, departments, employees, leave requests, attendance, payslips, and performance reviews.
+The codebase includes test coverage and fast static analysis tooling for both backend and frontend.
 
-### Run Backend Tests
-
+### 1. Run Backend Tests
 With your virtual environment active:
 
 ```bash
 python manage.py test employees -v 2
 ```
 
-Expected output ends with:
+### 2. Lint and Format Python Code (Ruff)
+Check and format Python code following PEP8 standards:
 
-```text
-OK
+```bash
+# Check for lint errors
+ruff check .
+
+# Automatically apply formatting
+ruff format .
 ```
 
-### Lint the Frontend
-
+### 3. Lint the Frontend (Oxlint)
 ```bash
 cd frontend
 npm run lint
 ```
 
-### Verify a Production Build Compiles
-
+### 4. Verify Production Build Compiles
 ```bash
 cd frontend
 npm run build
 ```
-
-A successful build finishes with `✓ built in <time>` and writes static assets to `frontend/dist/`.
 
 ---
 
@@ -382,18 +382,17 @@ The full-stack Employee Management System is fully containerized using **Docker*
 ### Container Architecture
 
 - **`ems_backend` (Django DRF):** Runs on Python 3.11-slim, auto-applies migrations on startup, persists data via SQLite volume mount, and exposes port `8000`.
-- **`ems_frontend` (React + Nginx):** Uses a multi-stage Docker build (`node:20-alpine` -> `nginx:alpine`). Nginx serves optimized production static assets and reverse-proxies `/api/` and `/admin/` requests to the backend container.
-
-### Prerequisites
-
-- [Docker Engine](https://docs.docker.com/engine/install/) (v20.10+)
-- [Docker Compose](https://docs.docker.com/compose/install/) (v2.0+)
-
----
+- **`ems_frontend` (React + Nginx):** Uses a multi-stage Docker build (`node:20-alpine` -> `nginx:alpine`). Nginx serves optimized production static assets, terminates SSL/TLS, and reverse-proxies `/api/` and `/admin/` requests to the backend container.
 
 ### Step-by-Step Instructions
 
-#### 1. Build and Start All Services
+#### 1. Generate SSL Certificates (Optional for HTTPS)
+```bash
+chmod +x generate-ssl.sh
+./generate-ssl.sh
+```
+
+#### 2. Build and Start All Services
 
 From the project root directory, run:
 
