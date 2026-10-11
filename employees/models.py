@@ -1,8 +1,15 @@
-from django.db import models
-from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator, EmailValidator
-from django.contrib.auth.models import User
-from datetime import date, datetime, time as datetime_time, timedelta
+from datetime import date, datetime, timedelta
+from datetime import time as datetime_time
 from decimal import Decimal
+
+from django.contrib.auth.models import User
+from django.core.validators import (
+    EmailValidator,
+    MaxValueValidator,
+    MinValueValidator,
+    RegexValidator,
+)
+from django.db import models
 
 
 def _years_between(start, end):
@@ -19,20 +26,20 @@ class UserProfile(models.Model):
     """
 
     ROLE_CHOICES = [
-        ('ADMIN', 'Administrator'),
-        ('HR', 'HR'),
-        ('MANAGER', 'Manager'),
-        ('EMPLOYEE', 'Employee'),
+        ("ADMIN", "Administrator"),
+        ("HR", "HR"),
+        ("MANAGER", "Manager"),
+        ("EMPLOYEE", "Employee"),
     ]
 
-    user = models.OneToOneField(
-        User, on_delete=models.CASCADE, related_name='profile'
-    )
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='EMPLOYEE')
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default="EMPLOYEE")
     employee = models.OneToOneField(
-        'Employee',
-        on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='user_account',
+        "Employee",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="user_account",
         help_text="Employee record belonging to this login (for self-service).",
     )
     phone_number = models.CharField(max_length=17, blank=True)
@@ -48,25 +55,29 @@ class Department(models.Model):
     def __str__(self):
         return self.name
 
+
 class Employee(models.Model):
     GENDER_CHOICES = [
-        ('M', 'Male'),
-        ('F', 'Female'),
-        ('O', 'Other'),
+        ("M", "Male"),
+        ("F", "Female"),
+        ("O", "Other"),
     ]
-    
+
     EMPLOYMENT_STATUS = [
-        ('FT', 'Full-time'),
-        ('PT', 'Part-time'),
-        ('CT', 'Contract'),
-        ('IN', 'Intern'),
+        ("FT", "Full-time"),
+        ("PT", "Part-time"),
+        ("CT", "Contract"),
+        ("IN", "Intern"),
     ]
-    
+
     # Personal Information
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField(unique=True, validators=[EmailValidator()])
-    phone_regex = RegexValidator(regex=r'^\+?1?\d{9,15}$', message="Phone number must be entered in format: '+999999999'. Up to 15 digits allowed.")
+    phone_regex = RegexValidator(
+        regex=r"^\+?1?\d{9,15}$",
+        message="Phone number must be entered in format: '+999999999'. Up to 15 digits allowed.",
+    )
     phone_number = models.CharField(validators=[phone_regex], max_length=17, blank=True)
     date_of_birth = models.DateField()
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES)
@@ -75,41 +86,55 @@ class Employee(models.Model):
     # Emergency contact
     emergency_contact_name = models.CharField(max_length=100, blank=True)
     emergency_contact_phone = models.CharField(
-        validators=[phone_regex], max_length=17, blank=True,
+        validators=[phone_regex],
+        max_length=17,
+        blank=True,
         help_text="Phone number of the emergency contact.",
     )
     emergency_contact_relation = models.CharField(
-        max_length=50, blank=True,
+        max_length=50,
+        blank=True,
         help_text="Relationship to the employee, e.g. Spouse, Parent, Sibling.",
     )
-    
+
     # Employment Details
     employee_id = models.CharField(max_length=20, unique=True)
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True)
     manager = models.ForeignKey(
-        'self',
+        "self",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name='direct_reports',
+        null=True,
+        blank=True,
+        related_name="direct_reports",
         help_text="Direct supervisor responsible for approving this employee's leave.",
     )
     position = models.CharField(max_length=100)
     hire_date = models.DateField(auto_now_add=True)
-    employment_status = models.CharField(max_length=2, choices=EMPLOYMENT_STATUS, default='FT')
-    salary = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)], help_text="Annual gross salary")
+    employment_status = models.CharField(
+        max_length=2, choices=EMPLOYMENT_STATUS, default="FT"
+    )
+    salary = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+        help_text="Annual gross salary",
+    )
 
     # Compensation details
     salary_monthly = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0,
+        max_digits=10,
+        decimal_places=2,
+        default=0,
         validators=[MinValueValidator(0)],
         help_text="Monthly salary (auto-derived from annual salary if not provided)",
     )
     bank_account = models.CharField(max_length=34, blank=True)
-    currency = models.CharField(max_length=3, default='USD')
+    currency = models.CharField(max_length=3, default="USD")
 
     # Experience
     total_experience_years = models.PositiveIntegerField(
-        default=0, validators=[MaxValueValidator(60)],
+        default=0,
+        validators=[MaxValueValidator(60)],
         help_text="Prior work experience at time of hire (years)",
     )
 
@@ -121,26 +146,37 @@ class Employee(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
-    
+
     def save(self, *args, **kwargs):
         # Keep the denormalized monthly salary in sync with the annual salary
         if self.salary and (not self.salary_monthly or self.salary_monthly == 0):
             # Coerce to Decimal first: salary may arrive as float/int from JSON
-            annual = self.salary if isinstance(self.salary, Decimal) else Decimal(str(self.salary))
-            self.salary_monthly = (annual / 12).quantize(Decimal('0.01'))
+            annual = (
+                self.salary
+                if isinstance(self.salary, Decimal)
+                else Decimal(str(self.salary))
+            )
+            self.salary_monthly = (annual / 12).quantize(Decimal("0.01"))
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.employee_id} - {self.first_name} {self.last_name}"
-    
+
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
-    
+
     @property
     def age(self):
         today = date.today()
-        return today.year - self.date_of_birth.year - ((today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day))
+        return (
+            today.year
+            - self.date_of_birth.year
+            - (
+                (today.month, today.day)
+                < (self.date_of_birth.month, self.date_of_birth.day)
+            )
+        )
 
     @property
     def years_of_service(self):
@@ -158,10 +194,10 @@ class Employee(models.Model):
         return sum(
             LeaveRequest.objects.filter(
                 employee=self,
-                leave_type='VL',
-                status='APPROVED',
+                leave_type="VL",
+                status="APPROVED",
                 start_date__year=year,
-            ).values_list('leave_days', flat=True)
+            ).values_list("leave_days", flat=True)
         )
 
     @property
@@ -193,41 +229,44 @@ class LeaveRequest(models.Model):
     """
 
     LEAVE_TYPES = [
-        ('VL', 'Vacation'),
-        ('SL', 'Sick'),
-        ('PL', 'Personal'),
-        ('ML', 'Maternity/Paternity'),
-        ('UL', 'Unpaid'),
+        ("VL", "Vacation"),
+        ("SL", "Sick"),
+        ("PL", "Personal"),
+        ("ML", "Maternity/Paternity"),
+        ("UL", "Unpaid"),
     ]
 
     STATUS_CHOICES = [
-        ('PENDING', 'Pending'),
-        ('APPROVED', 'Approved'),
-        ('REJECTED', 'Rejected'),
-        ('CANCELLED', 'Cancelled'),
+        ("PENDING", "Pending"),
+        ("APPROVED", "Approved"),
+        ("REJECTED", "Rejected"),
+        ("CANCELLED", "Cancelled"),
     ]
 
     employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name='leave_requests'
+        Employee, on_delete=models.CASCADE, related_name="leave_requests"
     )
-    leave_type = models.CharField(max_length=2, choices=LEAVE_TYPES, default='VL')
+    leave_type = models.CharField(max_length=2, choices=LEAVE_TYPES, default="VL")
     start_date = models.DateField()
     end_date = models.DateField()
     # Stored raw calendar-span days; leave_days holds the working-day count
     days_count = models.PositiveIntegerField(editable=False, default=0)
     leave_days = models.PositiveIntegerField(editable=False, default=0)
     reason = models.TextField(blank=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDING')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="PENDING")
     reviewed_by = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='reviewed_leave_requests'
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_leave_requests",
     )
     reviewed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
 
     def save(self, *args, **kwargs):
         # Calendar-span days and working-day count (excludes weekends and
@@ -236,10 +275,11 @@ class LeaveRequest(models.Model):
             delta = self.end_date - self.start_date
             self.days_count = delta.days + 1
             self.leave_days = working_days_between(
-                self.start_date, self.end_date,
+                self.start_date,
+                self.end_date,
                 holiday_dates=Holiday.objects.filter(
                     date__gte=self.start_date, date__lte=self.end_date
-                ).values_list('date', flat=True),
+                ).values_list("date", flat=True),
             )
         else:
             self.days_count = 0
@@ -252,10 +292,7 @@ class LeaveRequest(models.Model):
     @property
     def is_active_leave(self):
         today = date.today()
-        return (
-            self.status == 'APPROVED'
-            and self.start_date <= today <= self.end_date
-        )
+        return self.status == "APPROVED" and self.start_date <= today <= self.end_date
 
 
 class AttendanceRecord(models.Model):
@@ -264,20 +301,20 @@ class AttendanceRecord(models.Model):
     """
 
     STATUS_CHOICES = [
-        ('PRESENT', 'Present'),
-        ('LATE', 'Late'),
-        ('ABSENT', 'Absent'),
-        ('LEAVE', 'On Leave'),
-        ('REMOTE', 'Remote'),
+        ("PRESENT", "Present"),
+        ("LATE", "Late"),
+        ("ABSENT", "Absent"),
+        ("LEAVE", "On Leave"),
+        ("REMOTE", "Remote"),
     ]
 
     LATE_CUTOFF = datetime_time(9, 0)  # arrivals after 09:00 count as late
 
     employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name='attendance_records'
+        Employee, on_delete=models.CASCADE, related_name="attendance_records"
     )
     date = models.DateField(default=date.today)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PRESENT')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="PRESENT")
     check_in = models.TimeField(null=True, blank=True)
     check_out = models.TimeField(null=True, blank=True)
     notes = models.CharField(max_length=255, blank=True)
@@ -285,17 +322,17 @@ class AttendanceRecord(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-date']
-        unique_together = ('employee', 'date')
+        ordering = ["-date"]
+        unique_together = ("employee", "date")
 
     def save(self, *args, **kwargs):
         # Auto-flag late arrivals when a check-in exists but no explicit status
         if (
             self.check_in
-            and self.status == 'PRESENT'
+            and self.status == "PRESENT"
             and self.check_in > self.LATE_CUTOFF
         ):
-            self.status = 'LATE'
+            self.status = "LATE"
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -306,9 +343,8 @@ class AttendanceRecord(models.Model):
         """Hours worked as a float, from check-in/check-out (None if incomplete)."""
         if not self.check_in or not self.check_out:
             return None
-        delta = (
-            datetime.combine(date.min, self.check_out)
-            - datetime.combine(date.min, self.check_in)
+        delta = datetime.combine(date.min, self.check_out) - datetime.combine(
+            date.min, self.check_in
         )
         return round(max(delta.total_seconds() / 3600, 0), 2)
 
@@ -320,37 +356,54 @@ class Payslip(models.Model):
     """
 
     employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name='payslips'
+        Employee, on_delete=models.CASCADE, related_name="payslips"
     )
     period_year = models.PositiveIntegerField()
-    period_month = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)])
+    period_month = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(12)]
+    )
 
     basic_salary = models.DecimalField(max_digits=10, decimal_places=2)
     allowances = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)],
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
         help_text="Transport, housing, and other allowances",
     )
     bonus = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)],
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
     )
     tax_deduction = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)],
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
     )
     other_deductions = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)],
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
         help_text="Loans, advances, and other deductions",
     )
     net_pay = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)],
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
         help_text="Gross (basic + allowances + bonus) minus deductions",
     )
-    currency = models.CharField(max_length=3, default='USD')
+    currency = models.CharField(max_length=3, default="USD")
     notes = models.CharField(max_length=255, blank=True)
     generated_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-period_year', '-period_month']
-        unique_together = ('employee', 'period_year', 'period_month')
+        ordering = ["-period_year", "-period_month"]
+        unique_together = ("employee", "period_year", "period_month")
 
     def save(self, *args, **kwargs):
         # Derive net pay server-side so clients can't send inconsistent totals.
@@ -358,9 +411,10 @@ class Payslip(models.Model):
         # which would leave net_pay as an int and lose cent-level precision.
         def _dec(value):
             return value if isinstance(value, Decimal) else Decimal(str(value or 0))
+
         gross = _dec(self.basic_salary) + _dec(self.allowances) + _dec(self.bonus)
         deductions = _dec(self.tax_deduction) + _dec(self.other_deductions)
-        self.net_pay = (gross - deductions).quantize(Decimal('0.01'))
+        self.net_pay = (gross - deductions).quantize(Decimal("0.01"))
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -377,6 +431,7 @@ class Payslip(models.Model):
     @property
     def period_label(self):
         import calendar
+
         return f"{calendar.month_name[self.period_month]} {self.period_year}"
 
 
@@ -387,17 +442,20 @@ class PerformanceReview(models.Model):
     """
 
     STATUS_CHOICES = [
-        ('DRAFT', 'Draft'),
-        ('COMPLETED', 'Completed'),
-        ('ACKNOWLEDGED', 'Acknowledged by employee'),
+        ("DRAFT", "Draft"),
+        ("COMPLETED", "Completed"),
+        ("ACKNOWLEDGED", "Acknowledged by employee"),
     ]
 
     employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name='performance_reviews'
+        Employee, on_delete=models.CASCADE, related_name="performance_reviews"
     )
     reviewer = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='conducted_performance_reviews',
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="conducted_performance_reviews",
     )
     review_period = models.CharField(
         max_length=20,
@@ -407,30 +465,35 @@ class PerformanceReview(models.Model):
 
     # Competency scores (1-5)
     productivity = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(5)], default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        default=3,
     )
     quality = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(5)], default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        default=3,
     )
     teamwork = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(5)], default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        default=3,
     )
     communication = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(5)], default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        default=3,
     )
     leadership = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(5)], default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        default=3,
     )
 
     strengths = models.TextField(blank=True)
     areas_for_improvement = models.TextField(blank=True)
     goals = models.TextField(blank=True)
-    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='DRAFT')
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="DRAFT")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-review_date']
+        ordering = ["-review_date"]
 
     def __str__(self):
         return f"{self.employee} - {self.review_period}"
@@ -438,8 +501,11 @@ class PerformanceReview(models.Model):
     @property
     def overall_rating(self):
         scores = [
-            self.productivity, self.quality, self.teamwork,
-            self.communication, self.leadership,
+            self.productivity,
+            self.quality,
+            self.teamwork,
+            self.communication,
+            self.leadership,
         ]
         return round(sum(scores) / len(scores), 1)
 
@@ -447,14 +513,14 @@ class PerformanceReview(models.Model):
     def rating_label(self):
         rating = self.overall_rating
         if rating >= 4.5:
-            return 'Outstanding'
+            return "Outstanding"
         if rating >= 3.5:
-            return 'Exceeds Expectations'
+            return "Exceeds Expectations"
         if rating >= 2.5:
-            return 'Meets Expectations'
+            return "Meets Expectations"
         if rating >= 1.5:
-            return 'Needs Improvement'
-        return 'Unsatisfactory'
+            return "Needs Improvement"
+        return "Unsatisfactory"
 
 
 class Holiday(models.Model):
@@ -469,7 +535,7 @@ class Holiday(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['date']
+        ordering = ["date"]
 
     def __str__(self):
         return f"{self.name} ({self.date})"
@@ -483,16 +549,16 @@ class EmploymentEvent(models.Model):
     """
 
     EVENT_TYPES = [
-        ('HIRED', 'Hired'),
-        ('PROMOTION', 'Promotion'),
-        ('TRANSFER', 'Department Transfer'),
-        ('SALARY_CHANGE', 'Salary Change'),
-        ('ROLE_CHANGE', 'Employment Status Change'),
-        ('EXIT', 'Exit'),
+        ("HIRED", "Hired"),
+        ("PROMOTION", "Promotion"),
+        ("TRANSFER", "Department Transfer"),
+        ("SALARY_CHANGE", "Salary Change"),
+        ("ROLE_CHANGE", "Employment Status Change"),
+        ("EXIT", "Exit"),
     ]
 
     employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name='employment_events'
+        Employee, on_delete=models.CASCADE, related_name="employment_events"
     )
     event_type = models.CharField(max_length=15, choices=EVENT_TYPES)
     effective_date = models.DateField(default=date.today)
@@ -500,33 +566,48 @@ class EmploymentEvent(models.Model):
 
     # Snapshots of the state relevant to the event
     previous_department = models.ForeignKey(
-        Department, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='+',
+        Department,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
     )
     new_department = models.ForeignKey(
-        Department, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='+',
+        Department,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
     )
     previous_position = models.CharField(max_length=100, blank=True)
     new_position = models.CharField(max_length=100, blank=True)
-    previous_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    new_salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    previous_salary = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    new_salary = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
 
     created_by = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='employment_events_created',
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="employment_events_created",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-effective_date', '-created_at']
+        ordering = ["-effective_date", "-created_at"]
 
     def __str__(self):
-        return f"{self.employee} - {self.get_event_type_display()} ({self.effective_date})"
+        return (
+            f"{self.employee} - {self.get_event_type_display()} ({self.effective_date})"
+        )
 
 
 def _document_upload_path(instance, filename):
-    return f'documents/employee_{instance.employee_id}/{filename}'
+    return f"documents/employee_{instance.employee_id}/{filename}"
 
 
 class EmployeeDocument(models.Model):
@@ -535,27 +616,32 @@ class EmployeeDocument(models.Model):
     """
 
     CATEGORY_CHOICES = [
-        ('CONTRACT', 'Contract'),
-        ('ID', 'ID Document'),
-        ('CERTIFICATE', 'Certificate'),
-        ('EVALUATION', 'Evaluation'),
-        ('OTHER', 'Other'),
+        ("CONTRACT", "Contract"),
+        ("ID", "ID Document"),
+        ("CERTIFICATE", "Certificate"),
+        ("EVALUATION", "Evaluation"),
+        ("OTHER", "Other"),
     ]
 
     employee = models.ForeignKey(
-        Employee, on_delete=models.CASCADE, related_name='documents'
+        Employee, on_delete=models.CASCADE, related_name="documents"
     )
-    document_type = models.CharField(max_length=15, choices=CATEGORY_CHOICES, default='OTHER')
+    document_type = models.CharField(
+        max_length=15, choices=CATEGORY_CHOICES, default="OTHER"
+    )
     title = models.CharField(max_length=100)
     file = models.FileField(upload_to=_document_upload_path, max_length=300)
     uploaded_by = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='documents_uploaded',
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="documents_uploaded",
     )
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-uploaded_at']
+        ordering = ["-uploaded_at"]
 
     def __str__(self):
         return f"{self.employee} - {self.title}"
@@ -568,19 +654,20 @@ class Notification(models.Model):
     """
 
     recipient = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name='notifications'
+        User, on_delete=models.CASCADE, related_name="notifications"
     )
     verb = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     link = models.CharField(
-        max_length=200, blank=True,
+        max_length=200,
+        blank=True,
         help_text="Frontend route to open when the notification is clicked.",
     )
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.recipient.username}: {self.verb}"

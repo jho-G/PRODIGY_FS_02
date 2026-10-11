@@ -15,10 +15,10 @@ views (e.g. queryset scoping), so they are the single source of truth.
 from rest_framework import permissions
 
 # Role constants — mirrored on UserProfile.ROLE_CHOICES
-ROLE_ADMIN = 'ADMIN'
-ROLE_HR = 'HR'
-ROLE_MANAGER = 'MANAGER'
-ROLE_EMPLOYEE = 'EMPLOYEE'
+ROLE_ADMIN = "ADMIN"
+ROLE_HR = "HR"
+ROLE_MANAGER = "MANAGER"
+ROLE_EMPLOYEE = "EMPLOYEE"
 
 WRITE_ROLES = {ROLE_ADMIN, ROLE_HR, ROLE_MANAGER}
 DELETE_ROLES = {ROLE_ADMIN, ROLE_HR}
@@ -26,11 +26,11 @@ DELETE_ROLES = {ROLE_ADMIN, ROLE_HR}
 
 def get_role(user):
     """Return the role string for a user; EMPLOYEE for anonymous/missing profile."""
-    if not getattr(user, 'is_authenticated', False):
+    if not getattr(user, "is_authenticated", False):
         return ROLE_EMPLOYEE
     if user.is_superuser:
         return ROLE_ADMIN
-    profile = getattr(user, 'profile', None)
+    profile = getattr(user, "profile", None)
     return profile.role if profile else ROLE_EMPLOYEE
 
 
@@ -48,11 +48,9 @@ def is_manager_or_above(user):
 
 def is_direct_manager(user, employee):
     """True if the given employee reports (directly) to this user's employee record."""
-    manager_employee = getattr(user, 'employee_record', None)
+    manager_employee = getattr(user, "employee_record", None)
     return bool(
-        manager_employee
-        and employee
-        and employee.manager_id == manager_employee.id
+        manager_employee and employee and employee.manager_id == manager_employee.id
     )
 
 
@@ -67,7 +65,7 @@ class IsAuthenticatedReadOnlyOrStaff(permissions.BasePermission):
             return False
         if request.method in permissions.SAFE_METHODS:
             return True
-        if request.method == 'DELETE':
+        if request.method == "DELETE":
             return is_hr_or_above(request.user)
         return is_manager_or_above(request.user)
 

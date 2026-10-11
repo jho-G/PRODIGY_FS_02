@@ -7,7 +7,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -16,34 +15,108 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Department',
+            name="Department",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=100)),
-                ('description', models.TextField(blank=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=100)),
+                ("description", models.TextField(blank=True)),
             ],
         ),
         migrations.CreateModel(
-            name='Employee',
+            name="Employee",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('first_name', models.CharField(max_length=50)),
-                ('last_name', models.CharField(max_length=50)),
-                ('email', models.EmailField(max_length=254, unique=True, validators=[django.core.validators.EmailValidator()])),
-                ('phone_number', models.CharField(blank=True, max_length=17, validators=[django.core.validators.RegexValidator(message="Phone number must be entered in format: '+999999999'. Up to 15 digits allowed.", regex='^\\+?1?\\d{9,15}$')])),
-                ('date_of_birth', models.DateField()),
-                ('gender', models.CharField(choices=[('M', 'Male'), ('F', 'Female'), ('O', 'Other')], max_length=1)),
-                ('address', models.TextField()),
-                ('employee_id', models.CharField(max_length=20, unique=True)),
-                ('position', models.CharField(max_length=100)),
-                ('hire_date', models.DateField(auto_now_add=True)),
-                ('employment_status', models.CharField(choices=[('FT', 'Full-time'), ('PT', 'Part-time'), ('CT', 'Contract'), ('IN', 'Intern')], default='FT', max_length=2)),
-                ('salary', models.DecimalField(decimal_places=2, max_digits=10, validators=[django.core.validators.MinValueValidator(0)])),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('is_active', models.BooleanField(default=True)),
-                ('created_by', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL)),
-                ('department', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to='employees.department')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("first_name", models.CharField(max_length=50)),
+                ("last_name", models.CharField(max_length=50)),
+                (
+                    "email",
+                    models.EmailField(
+                        max_length=254,
+                        unique=True,
+                        validators=[django.core.validators.EmailValidator()],
+                    ),
+                ),
+                (
+                    "phone_number",
+                    models.CharField(
+                        blank=True,
+                        max_length=17,
+                        validators=[
+                            django.core.validators.RegexValidator(
+                                message="Phone number must be entered in format: '+999999999'. Up to 15 digits allowed.",
+                                regex="^\\+?1?\\d{9,15}$",
+                            )
+                        ],
+                    ),
+                ),
+                ("date_of_birth", models.DateField()),
+                (
+                    "gender",
+                    models.CharField(
+                        choices=[("M", "Male"), ("F", "Female"), ("O", "Other")],
+                        max_length=1,
+                    ),
+                ),
+                ("address", models.TextField()),
+                ("employee_id", models.CharField(max_length=20, unique=True)),
+                ("position", models.CharField(max_length=100)),
+                ("hire_date", models.DateField(auto_now_add=True)),
+                (
+                    "employment_status",
+                    models.CharField(
+                        choices=[
+                            ("FT", "Full-time"),
+                            ("PT", "Part-time"),
+                            ("CT", "Contract"),
+                            ("IN", "Intern"),
+                        ],
+                        default="FT",
+                        max_length=2,
+                    ),
+                ),
+                (
+                    "salary",
+                    models.DecimalField(
+                        decimal_places=2,
+                        max_digits=10,
+                        validators=[django.core.validators.MinValueValidator(0)],
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("is_active", models.BooleanField(default=True)),
+                (
+                    "created_by",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "department",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="employees.department",
+                    ),
+                ),
             ],
         ),
     ]

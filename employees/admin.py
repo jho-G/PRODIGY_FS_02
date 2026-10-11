@@ -1,4 +1,5 @@
 from django.contrib import admin
+
 from .models import (
     AttendanceRecord,
     Department,
@@ -13,81 +14,141 @@ from .models import (
     UserProfile,
 )
 
+
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'employee_count')
-    search_fields = ('name',)
+    list_display = ("id", "name", "employee_count")
+    search_fields = ("name",)
 
     def employee_count(self, obj):
         return obj.employee_set.filter(is_active=True).count()
 
+
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ('employee_id', 'full_name_display', 'department', 'manager',
-                    'position', 'employment_status', 'salary', 'salary_monthly',
-                    'total_experience_years', 'is_active')
-    list_filter = ('department', 'employment_status', 'is_active', 'gender')
-    search_fields = ('employee_id', 'first_name', 'last_name', 'email', 'position')
-    readonly_fields = ('years_of_service', 'effective_experience_years')
-    raw_id_fields = ('manager',)
+    list_display = (
+        "employee_id",
+        "full_name_display",
+        "department",
+        "manager",
+        "position",
+        "employment_status",
+        "salary",
+        "salary_monthly",
+        "total_experience_years",
+        "is_active",
+    )
+    list_filter = ("department", "employment_status", "is_active", "gender")
+    search_fields = ("employee_id", "first_name", "last_name", "email", "position")
+    readonly_fields = ("years_of_service", "effective_experience_years")
+    raw_id_fields = ("manager",)
 
     def full_name_display(self, obj):
         return obj.full_name
-    full_name_display.short_description = 'Name'
+
+    full_name_display.short_description = "Name"
+
 
 @admin.register(Payslip)
 class PayslipAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'period_year', 'period_month', 'gross_pay',
-                    'total_deductions', 'net_pay', 'currency')
-    list_filter = ('period_year', 'period_month', 'currency')
-    search_fields = ('employee__first_name', 'employee__last_name', 'employee__employee_id')
+    list_display = (
+        "employee",
+        "period_year",
+        "period_month",
+        "gross_pay",
+        "total_deductions",
+        "net_pay",
+        "currency",
+    )
+    list_filter = ("period_year", "period_month", "currency")
+    search_fields = (
+        "employee__first_name",
+        "employee__last_name",
+        "employee__employee_id",
+    )
+
 
 @admin.register(AttendanceRecord)
 class AttendanceRecordAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'date', 'status', 'check_in', 'check_out', 'notes')
-    list_filter = ('status', 'date')
-    search_fields = ('employee__first_name', 'employee__last_name', 'employee__employee_id')
+    list_display = ("employee", "date", "status", "check_in", "check_out", "notes")
+    list_filter = ("status", "date")
+    search_fields = (
+        "employee__first_name",
+        "employee__last_name",
+        "employee__employee_id",
+    )
+
 
 @admin.register(LeaveRequest)
 class LeaveRequestAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'leave_type', 'start_date', 'end_date',
-                    'days_count', 'status', 'reviewed_by')
-    list_filter = ('status', 'leave_type')
-    search_fields = ('employee__first_name', 'employee__last_name', 'employee__employee_id')
+    list_display = (
+        "employee",
+        "leave_type",
+        "start_date",
+        "end_date",
+        "days_count",
+        "status",
+        "reviewed_by",
+    )
+    list_filter = ("status", "leave_type")
+    search_fields = (
+        "employee__first_name",
+        "employee__last_name",
+        "employee__employee_id",
+    )
+
 
 @admin.register(PerformanceReview)
 class PerformanceReviewAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'review_period', 'review_date', 'overall_rating',
-                    'rating_label', 'status', 'reviewer')
-    list_filter = ('status', 'review_period', 'review_date')
-    search_fields = ('employee__first_name', 'employee__last_name',
-                     'employee__employee_id', 'review_period', 'strengths',
-                     'areas_for_improvement', 'goals')
-    readonly_fields = ('overall_rating', 'rating_label')
+    list_display = (
+        "employee",
+        "review_period",
+        "review_date",
+        "overall_rating",
+        "rating_label",
+        "status",
+        "reviewer",
+    )
+    list_filter = ("status", "review_period", "review_date")
+    search_fields = (
+        "employee__first_name",
+        "employee__last_name",
+        "employee__employee_id",
+        "review_period",
+        "strengths",
+        "areas_for_improvement",
+        "goals",
+    )
+    readonly_fields = ("overall_rating", "rating_label")
+
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'role', 'employee')
-    list_filter = ('role',)
-    search_fields = ('user__username', 'user__email')
+    list_display = ("user", "role", "employee")
+    list_filter = ("role",)
+    search_fields = ("user__username", "user__email")
+
 
 @admin.register(Holiday)
 class HolidayAdmin(admin.ModelAdmin):
-    list_display = ('name', 'date', 'description')
-    search_fields = ('name',)
+    list_display = ("name", "date", "description")
+    search_fields = ("name",)
+
 
 @admin.register(EmploymentEvent)
 class EmploymentEventAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'event_type', 'effective_date', 'notes')
-    list_filter = ('event_type',)
+    list_display = ("employee", "event_type", "effective_date", "notes")
+    list_filter = ("event_type",)
+
 
 @admin.register(EmployeeDocument)
 class EmployeeDocumentAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'title', 'document_type', 'uploaded_by', 'uploaded_at')
-    list_filter = ('document_type',)
+    list_display = ("employee", "title", "document_type", "uploaded_by", "uploaded_at")
+    list_filter = ("document_type",)
+
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
-    list_display = ('recipient', 'verb', 'is_read', 'created_at')
-    list_filter = ('is_read',)
-    search_fields = ('recipient__username', 'verb')
+    list_display = ("recipient", "verb", "is_read", "created_at")
+    list_filter = ("is_read",)
+    search_fields = ("recipient__username", "verb")
