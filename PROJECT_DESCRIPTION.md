@@ -385,4 +385,96 @@ The system enforces a 4-tier hierarchical access model:
 | View organization holiday calendar | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | Add / Delete company holidays | :white_check_mark: | :white_check_mark: | :x: | :x: |
 
+---
+
+## 6. API Surface & Endpoint Specifications
+
+Base URI: `http://localhost:8000/api/` (Direct) or `https://localhost/api/` (via Nginx Ingress)
+
+All protected endpoints require an Authorization header:
+```http
+Authorization: Bearer <access_token>
+```
+
+### 6.1 Authentication Endpoints (`/api/auth/*`)
+
+| Method | Endpoint | Auth | Purpose | Request Body / Params | Expected Response |
+|---|---|:---:|---|---|---|
+| `POST` | `/api/auth/login/` | No | Authenticate user & issue JWT pair | `{"username": "...", "password": "..."}` | `200 OK`: `{access, refresh, user}` |
+| `POST` | `/api/auth/token/refresh/` | No | Rotate expired access token | `{"refresh": "..."}` | `200 OK`: `{access, refresh}` |
+| `POST` | `/api/auth/token/verify/` | No | Verify token integrity & expiry | `{"token": "..."}` | `200 OK`: `{}` |
+| `POST` | `/api/auth/logout/` | Bearer | Blacklist refresh token & terminate session | `{"refresh": "..."}` | `200 OK`: `{"message": "Logged out successfully."}` |
+| `GET` | `/api/auth/me/` | Bearer | Self-service current employee profile | None | `200 OK`: Full Employee record |
+| `GET` | `/api/auth/user/` | Bearer | Current Django user identity & role | None | `200 OK`: `{id, username, email, role, employee_id}` |
+
+### 6.2 Department Endpoints (`/api/departments/*`)
+
+| Method | Endpoint | Auth | Purpose | Query Parameters / Body |
+|---|---|:---:|---|---|
+| `GET` | `/api/departments/` | Bearer | List departments with employee count | `?search=<term>` |
+| `POST` | `/api/departments/` | Bearer (HR/Admin) | Create new department | `{"name": "...", "description": "..."}` |
+| `GET` | `/api/departments/{id}/` | Bearer | Retrieve single department detail | None |
+| `PUT`/`PATCH` | `/api/departments/{id}/` | Bearer (HR/Admin) | Update department properties | `{"description": "..."}` |
+| `DELETE` | `/api/departments/{id}/` | Bearer (Admin) | Delete department (must have 0 staff) | None |
+
+### 6.3 Employee Directory Endpoints (`/api/employees/*`)
+
+| Method | Endpoint | Auth | Purpose | Query Parameters / Body |
+|---|---|:---:|---|---|
+| `GET` | `/api/employees/` | Bearer | Paginated search & filtered list | `?search=`, `?department=`, `?employment_status=`, `?is_active=`, `?min_salary=`, `?page=` |
+| `POST` | `/api/employees/` | Bearer (HR/Admin) | Register new employee | Full employee profile JSON |
+| `GET` | `/api/employees/{id}/` | Bearer | Full profile with calculated metrics | Returns age, service_years, monthly salary |
+| `PUT`/`PATCH` | `/api/employees/{id}/` | Bearer (HR/Admin) | Update employee profile | Partial or complete profile JSON |
+| `DELETE` | `/api/employees/{id}/` | Bearer (HR/Admin) | Soft delete (`?hard=true` for Admin hard-delete) | `?hard=true` (optional) |
+| `POST` | `/api/employees/{id}/restore/` | Bearer (HR/Admin) | Restore soft-deactivated employee | None |
+| `GET` | `/api/employees/stats/` | Bearer (Manager+) | High-level workforce metric dashboard | Returns counts, avg salary, department breakdown |
+| `GET` | `/api/employees/export/` | Bearer (HR/Admin) | Export filtered employee directory as CSV | Same filters as `GET /api/employees/` |
+
+### 6.4 Leave Management Endpoints (`/api/leaves/*`)
+
+| Method | Endpoint | Auth | Purpose | Details |
+|---|---|:---:|---|---|
+| `GET` | `/api/leaves/` | Bearer | List leave requests (scoped to role) | `?status=PENDING&leave_type=VL&employee=<id>` |
+| `POST` | `/api/leaves/` | Bearer | Submit a new leave request | `{"leave_type": "VL", "start_date": "...", "end_date": "...", "reason": "..."}` |
+| `POST` | `/api/leaves/{id}/approve/` | Bearer (Manager+) | Approve pending leave | Sets status to `APPROVED`, records reviewer |
+| `POST` | `/api/leaves/{id}/reject/` | Bearer (Manager+) | Reject pending leave with explanation | `{"rejection_reason": "Project deadline collision"}` |
+| `POST` | `/api/leaves/{id}/cancel/` | Bearer (Self/HR) | Cancel pending or approved request | Restores employee leave balance |
+
+### 6.5 Attendance Endpoints (`/api/attendance/*`)
+
+| Method | Endpoint | Auth | Purpose | Details |
+|---|---|:---:|---|---|
+| `GET` | `/api/attendance/` | Bearer | List time records | Filter by `date`, `date_after`, `date_before`, `status` |
+| `POST` | `/api/attendance/` | Bearer | Log attendance entry | Date, initial status, employee |
+| `POST` | `/api/attendance/{id}/check_in/` | Bearer | Record check-in timestamp | Auto-flags `LATE` if after 09:00 AM |
+| `POST` | `/api/attendance/{id}/check_out/` | Bearer | Record check-out timestamp | Automatically computes `work_hours` |
+| `GET` | `/api/attendance/summary/` | Bearer | Monthly workforce attendance recap | `?year=2026&month=10` |
+
+### 6.6 Payroll Endpoints (`/api/payslips/*`)
+
+| Method | Endpoint | Auth | Purpose | Details |
+|---|---|:---:|---|---|
+| `GET` | `/api/payslips/` | Bearer | List payslips | Scoped to own for employee; all for HR/Admin |
+| `POST` | `/api/payslips/` | Bearer (HR/Admin) | Create individual payslip | Basic salary, allowances, deductions |
+| `POST` | `/api/payslips/generate/` | Bearer (HR/Admin) | Bulk generate payroll for cycle | `{"year": 2026, "month": 10}` |
+| `GET` | `/api/payslips/summary/` | Bearer (HR/Admin) | Aggregate payroll expenses | Gross payroll, tax withheld, net disbursement |
+
+### 6.7 Performance Reviews (`/api/performance-reviews/*`)
+
+| Method | Endpoint | Auth | Purpose | Details |
+|---|---|:---:|---|---|
+| `GET` | `/api/performance-reviews/` | Bearer | List reviews | Filter by `employee`, `period`, `status` |
+| `POST` | `/api/performance-reviews/` | Bearer (Manager+) | Create review draft | 1-5 scores for 5 competency dimensions |
+| `POST` | `/api/performance-reviews/{id}/complete/` | Bearer (Manager+) | Finalize evaluation | Transitions status to `COMPLETED` |
+| `POST` | `/api/performance-reviews/{id}/acknowledge/` | Bearer (Employee) | Acknowledge review | Sets `acknowledged_at` timestamp |
+| `GET` | `/api/performance-reviews/summary/` | Bearer (HR/Admin) | Org rating distribution | Average ratings and top performers |
+
+### 6.8 Supporting Resource Endpoints
+
+- **Holidays (`/api/holidays/`):** Full CRUD for company holidays. Read-only for general staff; write for HR/Admin.
+- **Documents (`/api/documents/`):** Multipart file uploads for employee records, contracts, certificates, and ID proofs.
+- **Employment Events (`/api/employment-events/`):** Career history timeline entries (promotions, transfers, wage updates).
+- **Notifications (`/api/notifications/`):** User notifications with `/mark_all_read/` and `/unread_count/` convenience endpoints.
+
+
 
