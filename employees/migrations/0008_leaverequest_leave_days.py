@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('employees', '0007_holiday_employee_manager_employeedocument_and_more'),
+        ("employees", "0007_holiday_employee_manager_employeedocument_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='leaverequest',
-            name='leave_days',
+            model_name="leaverequest",
+            name="leave_days",
             field=models.PositiveIntegerField(default=0, editable=False),
         ),
     ]

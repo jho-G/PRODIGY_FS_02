@@ -1,40 +1,64 @@
 # Employee Management System (EMS) — Full-Stack App (Django + React)
 
-A robust, production-hardened full-stack Employee Management System built with **Django REST Framework** (backend) and **React + Vite** (frontend). Features **JWT authentication** with access/refresh token rotation, role-based access control, rate limiting, security headers, CORS protection, and a rich HR feature set — all containerized with Docker.
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
+[![Django 5.1](https://img.shields.io/badge/Django-5.1-092E20?style=flat&logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![Django REST Framework](https://img.shields.io/badge/DRF-3.15+-A30000?style=flat&logo=django&logoColor=white)](https://www.django-rest-framework.org/)
+[![React 18](https://img.shields.io/badge/React-18-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
+[![Vite 5](https://img.shields.io/badge/Vite-5-646CFF?style=flat&logo=vite&logoColor=white)](https://vitejs.dev/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A robust, enterprise-grade full-stack Employee Management System built with **Django REST Framework** (backend) and **React + Vite** (frontend). Features **JWT authentication** with access/refresh token rotation, 4-tier Role-Based Access Control (RBAC), rate limiting, security headers, CORS protection, real-time in-app notifications, document management, holiday calendars, attendance tracking, and automated payroll — all fully containerized with Docker & Nginx.
+
+> 📘 **Looking for comprehensive technical design docs?**  
+> Check out the exhaustive [PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md) covering database schema, ER diagrams, token refresh queue mechanics, and deployment architecture.
 
 ---
 
-## 📖 Description
+## 📑 Table of Contents
 
-The **Employee Management System (EMS)** backend is designed for HR personnel, team leaders, and administrators to handle workforce data efficiently. The architecture has transitioned away from traditional server-rendered HTML templates into a decoupled, modern API service utilizing Django REST Framework.
+- [📖 System Overview](#-system-overview)
+- [🛠️ Technology Stack](#️-technology-stack)
+- [🔐 Security & Authentication](#-security--authentication)
+- [👥 Role-Based Access Control (RBAC)](#-role-based-access-control-rbac)
+- [🚀 How to Run the Backend](#-how-to-run-the-backend)
+- [🖥️ Running the Frontend (Development Mode)](#️-running-the-frontend-development-mode)
+- [🐳 Running with Docker (Recommended)](#-running-with-docker-recommended)
+- [📡 API Reference & Endpoints](#-api-reference--endpoints)
+- [🌱 Mock Workforce Data](#-mock-workforce-data)
+- [✅ Running the Test Suite & Linters](#-running-the-test-suite--linters)
+- [📁 Project Directory Structure](#-project-directory-structure)
 
-### Key Features
+---
+
+## 📖 System Overview
+
+The **Employee Management System (EMS)** is engineered for HR departments, executive managers, and employees to coordinate organizational workflows through an API-first architecture.
+
+### Key Capabilities
 
 - **Decoupled RESTful Architecture:**
-  - Standardized JSON responses for all resources.
-  - CORS-enabled (`django-cors-headers`) for seamless connection with frontend single-page applications (React.js).
+  - Standardized JSON responses across all 11 domain models.
+  - CORS-enabled (`django-cors-headers`) for seamless connection with frontend single-page applications.
   - Django REST Framework's interactive Browsable API for in-browser testing and exploration.
 
-- **Authentication & Security:**
+- **Enterprise Authentication & Security:**
   - **JWT Authentication** (`djangorestframework-simplejwt`): short-lived access tokens (15 min) + long-lived refresh tokens (7 days) with automatic rotation and blacklisting on logout.
-  - **Custom JWT claims**: role, username, email, and employee_id are embedded in the token payload — no extra roundtrips needed.
-  - **Rate limiting**: `django-ratelimit` (5 attempts/min/IP on login) + DRF throttling (100/day anonymous, 2000/day authenticated).
+  - **Custom JWT claims**: `role`, `username`, `email`, and `employee_id` embedded in the token payload — eliminates redundant API requests.
+  - **Rate limiting**: `django-ratelimit` (5 attempts/min/IP on login) + DRF throttling (100/day anonymous, 2,000/day authenticated).
   - **Security headers**: HSTS, X-Frame-Options (DENY), X-Content-Type-Options, XSS protection.
-  - **Env-based config**: `python-decouple` — no secrets hardcoded; all settings driven from `.env` (see `.env.example`).
-  - **Strict CORS**: only explicit allowed origins in production; `CORS_ALLOW_ALL_ORIGINS` only in development.
-  - Automatic attribution: each employee record tracks who created it (`created_by`).
+  - **Env-based config**: `python-decouple` — no hardcoded credentials; settings driven from `.env`.
 
-- **Department & Employee Resource Management:**
-  - **Departments:** Full CRUD for organizational departments with computed active employee counts.
-  - **Employees:** Full CRUD supporting rich personal and employment profiles (unique Employee IDs, email validation, phone regex, age calculation, employment status, salary).
+- **Comprehensive HR Modules:**
+  - **Departments & Employees:** Full organizational hierarchy with managers, emergency contacts, banking data, soft-deletion, and CSV export.
+  - **Attendance & Timekeeping:** Daily clock-in/out, automated late flagging (>09:00 AM), remote status, and monthly work-hour recaps.
+  - **Leave Management:** 5 leave categories, day count calculation, supervisor approval/rejection workflows, and annual balances.
+  - **Payroll & Payslips:** Automated monthly generation, tax and allowance calculations, net pay derivation, and status tracking.
+  - **Performance Reviews:** 5-dimensional competency evaluations (1-5 scale), overall scoring, and employee acknowledgements.
+  - **Company Holidays & Documents:** Organization-wide calendar observances and secure multi-part document attachments.
+  - **In-App Notifications:** Real-time operational alerts for leave statuses, reviews, and payslips.
 
-- **Advanced Querying & Metrics:**
-  - Search across first name, last name, employee ID, email, and position.
-  - Filter by department ID, employment status (`FT`, `PT`, `CT`, `IN`), and active status.
-  - Safe soft-delete (`is_active=False`) with a dedicated `/restore/` endpoint and optional hard deletion (`?hard=true`).
-  - Aggregated metrics endpoint (`/api/employees/stats/`) delivering dashboard-ready analytics.
-
----
 
 ## 🛠️ Technology Stack
 
@@ -114,6 +138,19 @@ Key variables:
 - **Login endpoint**: max **5 attempts per minute per IP** (`django-ratelimit`). Returns `429 Too Many Requests` when exceeded.
 - **All anonymous endpoints**: **100 requests/day** (DRF throttling).
 - **Authenticated endpoints**: **2000 requests/day** per user.
+
+---
+
+## 👥 Role-Based Access Control (RBAC)
+
+The application enforces four hierarchical authorization roles managed in `employees/permissions.py`:
+
+| Role | Scope & Privileges |
+|---|---|
+| 👑 **ADMIN** | Full system governance. Can create, edit, and delete any resource, including permanent hard deletion (`?hard=true`) and department deletion. |
+| 🧑‍💼 **HR** | Workforce lifecycle administration. Can register employees, update contracts, manage departments, generate bulk payroll, upload documents, and approve leave requests. |
+| 👔 **MANAGER** | Team leadership. Can view department members, submit performance evaluations, conduct reviews, and approve/reject leave requests for direct reports. |
+| 👤 **EMPLOYEE** | Self-service portal. Can view their own profile, submit leave requests, punch daily clock-in/clock-out, view their own payslips, and acknowledge performance reviews. |
 
 ---
 
@@ -290,51 +327,51 @@ npm run lint     # lint with oxlint
 You can also smoke-test the API from the terminal:
 
 ```bash
-# Login request (returns your auth token)
+# 1. Login request (returns JWT access & refresh token pair)
 curl -X POST http://127.0.0.1:8000/api/auth/login/ \
   -H "Content-Type: application/json" \
   -d '{"username": "<your_username>", "password": "<your_password>"}'
 
-# List employees using the token from the login response
+# 2. List employees using the Bearer token from the login response
 curl http://127.0.0.1:8000/api/employees/ \
-  -H "Authorization: Token <your_token_here>"
+  -H "Authorization: Bearer <your_access_token_here>"
 ```
 
 ---
 
-## ✅ Running the Test Suite
+## ✅ Running the Test Suite & Linters
 
-The backend ships with a full API and model test suite in `employees/tests.py` covering authentication, departments, employees, leave requests, attendance, payslips, and performance reviews.
+The codebase includes test coverage and fast static analysis tooling for both backend and frontend.
 
-### Run Backend Tests
-
+### 1. Run Backend Tests
 With your virtual environment active:
 
 ```bash
 python manage.py test employees -v 2
 ```
 
-Expected output ends with:
+### 2. Lint and Format Python Code (Ruff)
+Check and format Python code following PEP8 standards:
 
-```text
-OK
+```bash
+# Check for lint errors
+ruff check .
+
+# Automatically apply formatting
+ruff format .
 ```
 
-### Lint the Frontend
-
+### 3. Lint the Frontend (Oxlint)
 ```bash
 cd frontend
 npm run lint
 ```
 
-### Verify a Production Build Compiles
-
+### 4. Verify Production Build Compiles
 ```bash
 cd frontend
 npm run build
 ```
-
-A successful build finishes with `✓ built in <time>` and writes static assets to `frontend/dist/`.
 
 ---
 
@@ -345,18 +382,17 @@ The full-stack Employee Management System is fully containerized using **Docker*
 ### Container Architecture
 
 - **`ems_backend` (Django DRF):** Runs on Python 3.11-slim, auto-applies migrations on startup, persists data via SQLite volume mount, and exposes port `8000`.
-- **`ems_frontend` (React + Nginx):** Uses a multi-stage Docker build (`node:20-alpine` -> `nginx:alpine`). Nginx serves optimized production static assets and reverse-proxies `/api/` and `/admin/` requests to the backend container.
-
-### Prerequisites
-
-- [Docker Engine](https://docs.docker.com/engine/install/) (v20.10+)
-- [Docker Compose](https://docs.docker.com/compose/install/) (v2.0+)
-
----
+- **`ems_frontend` (React + Nginx):** Uses a multi-stage Docker build (`node:20-alpine` -> `nginx:alpine`). Nginx serves optimized production static assets, terminates SSL/TLS, and reverse-proxies `/api/` and `/admin/` requests to the backend container.
 
 ### Step-by-Step Instructions
 
-#### 1. Build and Start All Services
+#### 1. Generate SSL Certificates (Optional for HTTPS)
+```bash
+chmod +x generate-ssl.sh
+./generate-ssl.sh
+```
+
+#### 2. Build and Start All Services
 
 From the project root directory, run:
 
@@ -429,14 +465,17 @@ Base URL: `http://127.0.0.1:8000/api/`
 
 | Method | Endpoint | Description | Auth Required |
 |---|---|---|---|
-| `POST` | `/api/auth/login/` | Authenticate with `username` & `password`. Returns auth `token` and user profile. | No |
-| `POST` | `/api/auth/logout/` | Invalidate and delete current auth token. | Yes |
-| `GET` | `/api/auth/user/` | Retrieve current authenticated user profile. | Yes |
+| `POST` | `/api/auth/login/` | Authenticate with `username` & `password`. Returns JWT `access` & `refresh` tokens + user profile. | No |
+| `POST` | `/api/auth/token/refresh/` | Rotate expired access token using refresh token. | No |
+| `POST` | `/api/auth/token/verify/` | Validate token validity & expiration. | No |
+| `POST` | `/api/auth/logout/` | Blacklist refresh token and invalidate session. | Yes (Bearer) |
+| `GET` | `/api/auth/me/` | Self-service full employee profile of currently authenticated user. | Yes (Bearer) |
+| `GET` | `/api/auth/user/` | Retrieve basic user identity and RBAC role. | Yes (Bearer) |
 
 #### Authentication Header
-Include the token in request headers for protected endpoints:
+Include the JWT access token in HTTP request headers for all protected endpoints:
 ```http
-Authorization: Token <your_token_key_here>
+Authorization: Bearer <your_access_token_here>
 ```
 
 ---
@@ -533,6 +572,47 @@ Statuses: `PRESENT`, `LATE` (auto-flagged after 09:00 check-in), `ABSENT`, `LEAV
 
 ---
 
+### 8. Holiday Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/holidays/` | List company observed holidays. |
+| `POST` | `/api/holidays/` | Add a new holiday date (HR/Admin only). |
+| `GET` / `PUT` / `PATCH` / `DELETE` | `/api/holidays/{id}/` | Manage holiday details. |
+
+---
+
+### 9. Employee Document Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/documents/` | List documents (own for employees; all for HR/Admin). |
+| `POST` | `/api/documents/` | Upload document file with metadata (multipart/form-data). |
+| `GET` / `DELETE` | `/api/documents/{id}/` | Download or delete an employee document. |
+
+---
+
+### 10. Employment Event Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/employment-events/` | List milestone timeline events (promotions, status changes). |
+| `POST` | `/api/employment-events/` | Record new employment event (HR/Admin). |
+| `GET` / `PUT` / `DELETE` | `/api/employment-events/{id}/` | Manage milestone event entry. |
+
+---
+
+### 11. Notification Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/notifications/` | List current user's in-app notifications. |
+| `PATCH` | `/api/notifications/{id}/` | Mark individual notification as read. |
+| `POST` | `/api/notifications/mark_all_read/` | Mark all notifications as read for current user. |
+| `GET` | `/api/notifications/unread_count/` | Get count of pending unread alerts. |
+
+---
+
 ## 🌱 Mock Data
 
 Populate the database with a realistic mock workforce for development and demos:
@@ -554,30 +634,43 @@ PRODIGY_FS_02/
 ├── Dockerfile                  # Django backend Docker container configuration
 ├── .dockerignore               # Backend Docker build exclusion rules
 ├── docker-compose.yml          # Orchestrates backend & frontend containers
+├── generate-ssl.sh             # Local dev SSL certificate generator script
 ├── manage.py                   # Django management script
-├── requirements.txt            # Python dependencies (Django, DRF, CORS)
+├── requirements.txt            # Python dependencies (Django, DRF, SimpleJWT, CORS)
+├── ruff.toml                   # Python code formatter and linter configuration
 ├── db.sqlite3                  # SQLite database (persisted via Docker volume)
-├── README.md                   # Project documentation
-├── employee_system/            # Django root configuration
-│   ├── settings.py             # DRF, CORS, Auth token & Database config
+├── README.md                   # Main project overview & quickstart guide
+├── PROJECT_DESCRIPTION.md      # Deep-dive architecture, ER diagrams & system spec
+├── employee_system/            # Django root project configuration
+│   ├── settings.py             # DRF, CORS, SimpleJWT, Throttling & Database config
 │   ├── urls.py                 # Root URL routing (/api/ & /admin/)
-│   └── wsgi.py
-├── employees/                  # Employee management API app
-│   ├── models.py               # Department, Employee, LeaveRequest, AttendanceRecord, Payslip, PerformanceReview
-│   ├── serializers.py          # DRF serializers for all resources
-│   ├── urls.py                 # DRF DefaultRouter and auth routing
-│   ├── admin.py                # Django admin registrations for all models
-│   ├── tests.py                # API & model test suite for all EMS resources
-│   ├── management/commands/seed_employees.py  # Mock data seeder
-│   └── views.py                # ViewSets (Employee, Department, Leave, Attendance, Payslip, PerformanceReview) and Auth APIViews
-└── frontend/                   # React Single Page Application (Vite)
-    ├── Dockerfile              # Multi-stage build (Node 20 -> Nginx Alpine)
-    ├── nginx.conf              # Nginx reverse proxy & SPA router config
+│   ├── asgi.py                 # ASGI application entrypoint
+│   └── wsgi.py                 # WSGI application entrypoint
+├── employees/                  # Employee management API application
+│   ├── models.py               # 11 Domain models (Employee, Department, Leave, Attendance, etc.)
+│   ├── serializers.py          # DRF serializers with validation rules
+│   ├── urls.py                 # DRF DefaultRouter and JWT auth routes
+│   ├── views.py                # ModelViewSets and specialized APIViews
+│   ├── permissions.py          # RBAC permission classes & role predicate helpers
+│   ├── notifications.py        # Centralized notification dispatch helper
+│   ├── admin.py                # Django admin panel registrations
+│   ├── tests.py                # Comprehensive API and model test suite
+│   └── management/commands/    # Custom CLI commands (seed_employees mock data)
+└── frontend/                   # React Single Page Application (Vite bundler)
+    ├── Dockerfile              # Multi-stage production build (Node 20 -> Nginx Alpine)
+    ├── nginx.conf              # Nginx reverse proxy, SSL termination & SPA router config
     ├── .dockerignore           # Frontend Docker build exclusions
-    ├── package.json            # React, Vite, Axios, React Router, Lucide
+    ├── package.json            # React 18, Vite, Axios, React Router, Lucide React
     └── src/
-        ├── api/                # Axios client, interceptors, and endpoints
-        ├── context/            # AuthContext (token & user state management)
-        ├── components/         # ProtectedRoute, Layout, EmployeeModal, EmployeeDetailModal
+        ├── api/                # Axios client with JWT refresh interceptor queue
+        ├── context/            # AuthContext (token state & RBAC predicates)
+        ├── components/         # ProtectedRoute, Layout, Navbar, Sidebar, modals
         └── pages/              # Login, Dashboard, Employees, Departments, Leave, Attendance, Payroll, Performance
 ```
+
+---
+
+## 📄 License & Attribution
+
+This project is licensed under the **MIT License**. Created as part of the Prodigy InfoTech Full-Stack Software Engineering program. See [PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md) for full architectural documentation.
+
