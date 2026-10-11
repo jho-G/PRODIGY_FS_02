@@ -21,6 +21,7 @@
 9. [DevOps, Containerization & SSL Deployment Runbook](#9-devops-containerization--ssl-deployment-runbook)
 10. [Testing, Quality Assurance & Linting Pipelines](#10-testing-quality-assurance--linting-pipelines)
 11. [Operational Runbook & Disaster Recovery](#11-operational-runbook--disaster-recovery)
+12. [Cross-References & Appendix](#12-cross-references--appendix)
 
 ---
 
@@ -720,6 +721,20 @@ pg_dump -U ems_user -h localhost -d ems_db > backups/ems_db_$(date +%Y%m%d).sql
 # Restore
 psql -U ems_user -h localhost -d ems_db < backups/ems_db_target.sql
 ```
+
+---
+
+## 12. Cross-References & Appendix
+
+- **Quick Start Guide:** Refer to [README.md](README.md) for local installation, virtual environment setup, and development commands.
+- **Environment Template:** Refer to `.env.example` for all runtime configuration keys.
+- **Docker Compose Orchestration:** Refer to `docker-compose.yml` for multi-service configuration.
+- **SSL Script:** Refer to `generate-ssl.sh` for certificate generation.
+- **Code Style:** Formatted and validated against `ruff.toml` (backend) and `oxlint` (frontend).
+
+---
+*Employee Management System (EMS) — Production Engineering Documentation.*
+
 
 
 

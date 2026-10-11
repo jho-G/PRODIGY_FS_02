@@ -634,30 +634,43 @@ PRODIGY_FS_02/
 ├── Dockerfile                  # Django backend Docker container configuration
 ├── .dockerignore               # Backend Docker build exclusion rules
 ├── docker-compose.yml          # Orchestrates backend & frontend containers
+├── generate-ssl.sh             # Local dev SSL certificate generator script
 ├── manage.py                   # Django management script
-├── requirements.txt            # Python dependencies (Django, DRF, CORS)
+├── requirements.txt            # Python dependencies (Django, DRF, SimpleJWT, CORS)
+├── ruff.toml                   # Python code formatter and linter configuration
 ├── db.sqlite3                  # SQLite database (persisted via Docker volume)
-├── README.md                   # Project documentation
-├── employee_system/            # Django root configuration
-│   ├── settings.py             # DRF, CORS, Auth token & Database config
+├── README.md                   # Main project overview & quickstart guide
+├── PROJECT_DESCRIPTION.md      # Deep-dive architecture, ER diagrams & system spec
+├── employee_system/            # Django root project configuration
+│   ├── settings.py             # DRF, CORS, SimpleJWT, Throttling & Database config
 │   ├── urls.py                 # Root URL routing (/api/ & /admin/)
-│   └── wsgi.py
-├── employees/                  # Employee management API app
-│   ├── models.py               # Department, Employee, LeaveRequest, AttendanceRecord, Payslip, PerformanceReview
-│   ├── serializers.py          # DRF serializers for all resources
-│   ├── urls.py                 # DRF DefaultRouter and auth routing
-│   ├── admin.py                # Django admin registrations for all models
-│   ├── tests.py                # API & model test suite for all EMS resources
-│   ├── management/commands/seed_employees.py  # Mock data seeder
-│   └── views.py                # ViewSets (Employee, Department, Leave, Attendance, Payslip, PerformanceReview) and Auth APIViews
-└── frontend/                   # React Single Page Application (Vite)
-    ├── Dockerfile              # Multi-stage build (Node 20 -> Nginx Alpine)
-    ├── nginx.conf              # Nginx reverse proxy & SPA router config
+│   ├── asgi.py                 # ASGI application entrypoint
+│   └── wsgi.py                 # WSGI application entrypoint
+├── employees/                  # Employee management API application
+│   ├── models.py               # 11 Domain models (Employee, Department, Leave, Attendance, etc.)
+│   ├── serializers.py          # DRF serializers with validation rules
+│   ├── urls.py                 # DRF DefaultRouter and JWT auth routes
+│   ├── views.py                # ModelViewSets and specialized APIViews
+│   ├── permissions.py          # RBAC permission classes & role predicate helpers
+│   ├── notifications.py        # Centralized notification dispatch helper
+│   ├── admin.py                # Django admin panel registrations
+│   ├── tests.py                # Comprehensive API and model test suite
+│   └── management/commands/    # Custom CLI commands (seed_employees mock data)
+└── frontend/                   # React Single Page Application (Vite bundler)
+    ├── Dockerfile              # Multi-stage production build (Node 20 -> Nginx Alpine)
+    ├── nginx.conf              # Nginx reverse proxy, SSL termination & SPA router config
     ├── .dockerignore           # Frontend Docker build exclusions
-    ├── package.json            # React, Vite, Axios, React Router, Lucide
+    ├── package.json            # React 18, Vite, Axios, React Router, Lucide React
     └── src/
-        ├── api/                # Axios client, interceptors, and endpoints
-        ├── context/            # AuthContext (token & user state management)
-        ├── components/         # ProtectedRoute, Layout, EmployeeModal, EmployeeDetailModal
+        ├── api/                # Axios client with JWT refresh interceptor queue
+        ├── context/            # AuthContext (token state & RBAC predicates)
+        ├── components/         # ProtectedRoute, Layout, Navbar, Sidebar, modals
         └── pages/              # Login, Dashboard, Employees, Departments, Leave, Attendance, Payroll, Performance
 ```
+
+---
+
+## 📄 License & Attribution
+
+This project is licensed under the **MIT License**. Created as part of the Prodigy InfoTech Full-Stack Software Engineering program. See [PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md) for full architectural documentation.
+
