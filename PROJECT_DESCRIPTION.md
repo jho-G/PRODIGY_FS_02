@@ -476,5 +476,88 @@ Authorization: Bearer <access_token>
 - **Employment Events (`/api/employment-events/`):** Career history timeline entries (promotions, transfers, wage updates).
 - **Notifications (`/api/notifications/`):** User notifications with `/mark_all_read/` and `/unread_count/` convenience endpoints.
 
+---
+
+## 7. Frontend Architecture & Client State Lifecycle
+
+The frontend application is constructed with **React 18** and packaged via **Vite**, delivering an SPA (Single-Page Application) experience.
+
+### 7.1 Directory Layout & Component Hierarchy
+
+```text
+frontend/src/
+├── api/
+│   ├── client.js           # Axios instance, request/response interceptors & token queue
+│   └── endpoints.js        # Declarative API URL route constants & helper wrappers
+├── context/
+│   └── AuthContext.jsx     # Context provider managing auth state, tokens & RBAC predicates
+├── components/
+│   ├── ProtectedRoute.jsx  # Route guard redirecting unauthenticated users to /login
+│   ├── Layout.jsx          # Shell with responsive sidebar, top navbar & notification popover
+│   ├── Sidebar.jsx         # Role-aware navigation drawer with Lucide icons
+│   ├── Navbar.jsx          # Header with user profile menu, breadcrumbs & theme toggler
+│   ├── EmployeeModal.jsx   # Form dialog for creating/editing employee records
+│   ├── EmployeeDetailModal.jsx # Comprehensive modal displaying tabbed profile details
+│   └── StatCard.jsx        # Dashboard metric widget with micro-animations
+├── pages/
+│   ├── Login.jsx           # JWT credential sign-in page with validation & error toasts
+│   ├── Dashboard.jsx       # Aggregated KPIs, charts, quick links & upcoming holidays
+│   ├── Employees.jsx       # Full directory with search, department filtering, pagination & CSV export
+│   ├── Departments.jsx     # Department cards with member rosters and active counts
+│   ├── Leave.jsx           # Leave balance cards, calendar requests & approval workflow
+│   ├── Attendance.jsx      # Punch in/out widget, monthly calendar grid & hours tracking
+│   ├── Payroll.jsx         # Payslip generator, salary table, net calculation & PDF downloads
+│   └── Performance.jsx     # Competency scorecards, manager evaluations & employee acknowledgement
+├── styles/
+│   ├── index.css           # Global CSS reset, typography, and utility tokens
+│   └── App.css             # Component-level styling & custom responsive layout rules
+├── App.jsx                 # Route definition table wrapped with AuthProvider
+└── main.jsx                # React root mount point
+```
+
+### 7.2 Interceptor Token Refresh Queue
+
+When a JWT access token expires after 15 minutes, ongoing background requests could trigger multiple simultaneous 401 errors. The Axios client handles this with a FIFO queue and mutex flag:
+
+1. **Request Interceptor:**
+   - Reads `access_token` from `localStorage`.
+   - Injects `Authorization: Bearer <access_token>` into outgoing request headers.
+
+2. **Response Interceptor & Queue Mechanism:**
+   - Detects `error.response?.status === 401`.
+   - Checks if a refresh request is already running (`isRefreshing = true`).
+   - If a refresh is already underway, it creates a pending Promise, pushes it to `failedQueue`, and waits.
+   - If no refresh is underway, it acquires the mutex (`isRefreshing = true`), extracts `refresh_token` from `localStorage`, and posts to `/api/auth/token/refresh/`.
+   - **Upon Success:** Stores the new access & refresh tokens in `localStorage`, notifies all queued promises with `processQueue(null, newAccessToken)`, and retries the original request.
+   - **Upon Failure:** Triggers `logout()`, clears `localStorage`, rejects all queued promises with `processQueue(error, null)`, and redirects the user to `/login`.
+
+### 7.3 AuthContext & Role-Based UI Rendering
+
+The `AuthContext` provides global authentication state and helper booleans consumed throughout the UI:
+- `user`: Holds decoded token identity `{ id, username, email, role, employee_id }`.
+- `isAuthenticated`: Boolean state verifying active token session.
+- `isAdmin`: `user?.role === 'ADMIN'`.
+- `isHR`: `user?.role === 'HR' || user?.role === 'ADMIN'`.
+- `isManager`: `['ADMIN', 'HR', 'MANAGER'].includes(user?.role)`.
+- `login(username, password)`: Exchanges credentials with `/api/auth/login/`.
+- `logout()`: Posts refresh token to `/api/auth/logout/` for blacklisting, wipes client storage, and resets state.
+
+UI components consume these flags to conditionally render administrative controls:
+```jsx
+{isHR && (
+  <button onClick={() => setShowAddModal(true)} className="btn-primary">
+    <UserPlus size={16} /> Add Employee
+  </button>
+)}
+```
+
+### 7.4 Design System & Visual Aesthetics
+
+- **Color Palette:** HSL-tailored primary indigo/blue accents (`hsl(222, 47%, 11%)` dark surface, `hsl(217, 91%, 60%)` vibrant brand accent).
+- **Dark Mode Support:** Automatic media query detection and user manual toggle with CSS custom properties.
+- **Glassmorphism:** Modern backdrop blur panels (`backdrop-filter: blur(12px)`) on modals and navigation headers.
+- **Micro-Interactions:** CSS transforms, subtle hover elevation, loading skeletons, and interactive state feedback.
+
+
 
 
