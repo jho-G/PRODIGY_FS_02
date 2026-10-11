@@ -558,6 +558,170 @@ UI components consume these flags to conditionally render administrative control
 - **Glassmorphism:** Modern backdrop blur panels (`backdrop-filter: blur(12px)`) on modals and navigation headers.
 - **Micro-Interactions:** CSS transforms, subtle hover elevation, loading skeletons, and interactive state feedback.
 
+---
+
+## 8. Security Engineering, Rate Limiting & Hardening
+
+The application applies a rigorous defense-in-depth security posture designed to satisfy modern enterprise audit standards.
+
+### 8.1 Network & HTTP Security Headers
+Nginx and Django cooperate to enforce high-grade transport and frame security:
+- **HSTS (HTTP Strict Transport Security):** Forces compliant clients to communicate only over TLS (`Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`).
+- **Clickjacking Defense:** `X-Frame-Options: DENY` prohibits embedding within third-party `<frame>` or `<iframe>` tags.
+- **MIME Sniffing Prevention:** `X-Content-Type-Options: nosniff` disables browser content sniffing.
+- **Cross-Site Scripting (XSS):** `X-XSS-Protection: 1; mode=block`.
+- **Referrer Policy:** `Referrer-Policy: strict-origin-when-cross-origin` preserves privacy on external navigation.
+
+### 8.2 CORS (Cross-Origin Resource Sharing) Policy
+Configured via `django-cors-headers`:
+- **Development:** Permissive origins for local debugging.
+- **Production:** Explicit whitelist (`CORS_ALLOWED_ORIGINS`) strictly restricted to registered frontend domains and reverse-proxy gateways. Credentials (`Access-Control-Allow-Credentials`) are enabled for secure authorization headers.
+
+### 8.3 Rate Limiting & Denial-of-Service Defense
+1. **Login Brute-Force Shield (`django-ratelimit`):**
+   - Evaluated at the view layer on `/api/auth/login/`.
+   - Threshold: **5 attempts per minute per remote client IP address**.
+   - Violations return an HTTP `429 Too Many Requests` status with retry metadata.
+2. **REST Framework Throttles:**
+   - **Anonymous Users (`AnonRateThrottle`):** Capped at 100 requests per day across unauthenticated endpoints.
+   - **Authenticated Users (`UserRateThrottle`):** Capped at 2,000 requests per day per user account to prevent denial-of-service through query loops.
+
+### 8.4 Secret Management & Sanitization
+All cryptographic secrets (`SECRET_KEY`), database credentials, allowed hosts, and token expiration lifespans are injected through environment variables via `python-decouple`. The repository enforces `.gitignore` coverage over `.env` files, preventing accidental credential exposure.
+
+---
+
+## 9. DevOps, Containerization & SSL Deployment Runbook
+
+### 9.1 Multi-Container Docker Architecture
+
+```text
+Host Server (Ports 80, 443)
+       │
+       ▼
++-------------------------------------------------------------+
+| ems_frontend Container (nginx:alpine)                       |
+|   - Serves React static build from /usr/share/nginx/html    |
+|   - Terminates TLS/SSL (Certs mounted from frontend/ssl)    |
+|   - Upstream Proxy /api/ & /admin/ -> http://backend:8000   |
++-------------------------------------------------------------+
+       │ Docker Bridge Network (ems_network)
+       ▼
++-------------------------------------------------------------+
+| ems_backend Container (python:3.11-slim)                    |
+|   - Runs Gunicorn WSGI server on port 8000                  |
+|   - Runs automated migrations on container launch           |
+|   - Mounts sqlite_data volume for database persistence      |
+|   - Mounts media_data volume for uploaded employee files    |
++-------------------------------------------------------------+
+```
+
+### 9.2 SSL Certificate Generation
+A self-contained helper script `generate-ssl.sh` is provided for generating local development and staging certificates:
+
+```bash
+chmod +x generate-ssl.sh
+./generate-ssl.sh
+```
+
+This generates:
+- `frontend/ssl/localhost.key` (RSA 2048-bit Private Key)
+- `frontend/ssl/localhost.crt` (X.509 Self-Signed Certificate with SAN `localhost` and `127.0.0.1`)
+
+### 9.3 Launching with Docker Compose
+
+```bash
+# 1. Clone repository
+git clone https://github.com/jho-G/PRODIGY_FS_02.git
+cd PRODIGY_FS_02
+
+# 2. Configure environment
+cp .env.example .env
+
+# 3. Generate dev SSL certificates
+./generate-ssl.sh
+
+# 4. Build and start containers in background
+docker compose up --build -d
+
+# 5. Seed initial mock workforce
+docker compose exec backend python manage.py seed_employees
+
+# 6. Verify service health
+docker compose ps
+```
+
+---
+
+## 10. Testing, Quality Assurance & Linting Pipelines
+
+### 10.1 Backend Test Automation
+The backend test suite (`employees/tests.py`) contains comprehensive tests covering:
+- Model validation constraints and calculated properties
+- DRF ViewSet permissions and status code compliance
+- Token authentication, rotation, and blacklisting
+- Leave approval state machine transitions
+- Payroll net salary calculation logic
+
+Execute backend tests:
+```bash
+python manage.py test employees -v 2
+```
+
+### 10.2 Code Quality & Formatting
+- **Python Linting & Formatting:** Powered by **Ruff** (configured in `ruff.toml`).
+  ```bash
+  ruff check .
+  ruff format --check .
+  ```
+- **Frontend Linting:** Powered by **oxlint** for ultrafast JavaScript/JSX static analysis.
+  ```bash
+  cd frontend
+  npm run lint
+  ```
+
+---
+
+## 11. Operational Runbook & Disaster Recovery
+
+### 11.1 Administrative Account Provisioning
+```bash
+# Native environment:
+python manage.py createsuperuser
+
+# Docker environment:
+docker compose exec backend python manage.py createsuperuser
+```
+
+### 11.2 Mock Workforce Seeding
+```bash
+# Seed standard mock company (60 employees, 7 departments):
+python manage.py seed_employees
+
+# Wipe and re-seed 150 employees:
+python manage.py seed_employees --count 150 --force
+```
+
+### 11.3 Database Backup & Restoration
+For SQLite persistence:
+```bash
+# Backup
+cp db.sqlite3 backups/db_$(date +%Y%m%d_%H%M%S).sqlite3
+
+# Restore
+cp backups/db_target.sqlite3 db.sqlite3
+```
+
+For PostgreSQL deployments:
+```bash
+# Backup
+pg_dump -U ems_user -h localhost -d ems_db > backups/ems_db_$(date +%Y%m%d).sql
+
+# Restore
+psql -U ems_user -h localhost -d ems_db < backups/ems_db_target.sql
+```
+
+
 
 
 
