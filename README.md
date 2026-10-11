@@ -141,6 +141,19 @@ Key variables:
 
 ---
 
+## 👥 Role-Based Access Control (RBAC)
+
+The application enforces four hierarchical authorization roles managed in `employees/permissions.py`:
+
+| Role | Scope & Privileges |
+|---|---|
+| 👑 **ADMIN** | Full system governance. Can create, edit, and delete any resource, including permanent hard deletion (`?hard=true`) and department deletion. |
+| 🧑‍💼 **HR** | Workforce lifecycle administration. Can register employees, update contracts, manage departments, generate bulk payroll, upload documents, and approve leave requests. |
+| 👔 **MANAGER** | Team leadership. Can view department members, submit performance evaluations, conduct reviews, and approve/reject leave requests for direct reports. |
+| 👤 **EMPLOYEE** | Self-service portal. Can view their own profile, submit leave requests, punch daily clock-in/clock-out, view their own payslips, and acknowledge performance reviews. |
+
+---
+
 ## 🚀 How to Run the Backend
 
 Follow these step-by-step instructions to set up and run the Django DRF backend server locally.
@@ -453,14 +466,17 @@ Base URL: `http://127.0.0.1:8000/api/`
 
 | Method | Endpoint | Description | Auth Required |
 |---|---|---|---|
-| `POST` | `/api/auth/login/` | Authenticate with `username` & `password`. Returns auth `token` and user profile. | No |
-| `POST` | `/api/auth/logout/` | Invalidate and delete current auth token. | Yes |
-| `GET` | `/api/auth/user/` | Retrieve current authenticated user profile. | Yes |
+| `POST` | `/api/auth/login/` | Authenticate with `username` & `password`. Returns JWT `access` & `refresh` tokens + user profile. | No |
+| `POST` | `/api/auth/token/refresh/` | Rotate expired access token using refresh token. | No |
+| `POST` | `/api/auth/token/verify/` | Validate token validity & expiration. | No |
+| `POST` | `/api/auth/logout/` | Blacklist refresh token and invalidate session. | Yes (Bearer) |
+| `GET` | `/api/auth/me/` | Self-service full employee profile of currently authenticated user. | Yes (Bearer) |
+| `GET` | `/api/auth/user/` | Retrieve basic user identity and RBAC role. | Yes (Bearer) |
 
 #### Authentication Header
-Include the token in request headers for protected endpoints:
+Include the JWT access token in HTTP request headers for all protected endpoints:
 ```http
-Authorization: Token <your_token_key_here>
+Authorization: Bearer <your_access_token_here>
 ```
 
 ---
@@ -554,6 +570,47 @@ Statuses: `PRESENT`, `LATE` (auto-flagged after 09:00 check-in), `ABSENT`, `LEAV
 | `POST` | `/api/performance-reviews/{id}/complete/` | Mark a draft as completed (records the reviewer). |
 | `POST` | `/api/performance-reviews/{id}/acknowledge/` | Employee acknowledges a completed review. |
 | `GET` | `/api/performance-reviews/summary/` | Rating distribution, top performers, and department averages. |
+
+---
+
+### 8. Holiday Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/holidays/` | List company observed holidays. |
+| `POST` | `/api/holidays/` | Add a new holiday date (HR/Admin only). |
+| `GET` / `PUT` / `PATCH` / `DELETE` | `/api/holidays/{id}/` | Manage holiday details. |
+
+---
+
+### 9. Employee Document Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/documents/` | List documents (own for employees; all for HR/Admin). |
+| `POST` | `/api/documents/` | Upload document file with metadata (multipart/form-data). |
+| `GET` / `DELETE` | `/api/documents/{id}/` | Download or delete an employee document. |
+
+---
+
+### 10. Employment Event Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/employment-events/` | List milestone timeline events (promotions, status changes). |
+| `POST` | `/api/employment-events/` | Record new employment event (HR/Admin). |
+| `GET` / `PUT` / `DELETE` | `/api/employment-events/{id}/` | Manage milestone event entry. |
+
+---
+
+### 11. Notification Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/notifications/` | List current user's in-app notifications. |
+| `PATCH` | `/api/notifications/{id}/` | Mark individual notification as read. |
+| `POST` | `/api/notifications/mark_all_read/` | Mark all notifications as read for current user. |
+| `GET` | `/api/notifications/unread_count/` | Get count of pending unread alerts. |
 
 ---
 
