@@ -1,40 +1,64 @@
 # Employee Management System (EMS) — Full-Stack App (Django + React)
 
-A robust, production-hardened full-stack Employee Management System built with **Django REST Framework** (backend) and **React + Vite** (frontend). Features **JWT authentication** with access/refresh token rotation, role-based access control, rate limiting, security headers, CORS protection, and a rich HR feature set — all containerized with Docker.
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
+[![Django 5.1](https://img.shields.io/badge/Django-5.1-092E20?style=flat&logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![Django REST Framework](https://img.shields.io/badge/DRF-3.15+-A30000?style=flat&logo=django&logoColor=white)](https://www.django-rest-framework.org/)
+[![React 18](https://img.shields.io/badge/React-18-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
+[![Vite 5](https://img.shields.io/badge/Vite-5-646CFF?style=flat&logo=vite&logoColor=white)](https://vitejs.dev/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A robust, enterprise-grade full-stack Employee Management System built with **Django REST Framework** (backend) and **React + Vite** (frontend). Features **JWT authentication** with access/refresh token rotation, 4-tier Role-Based Access Control (RBAC), rate limiting, security headers, CORS protection, real-time in-app notifications, document management, holiday calendars, attendance tracking, and automated payroll — all fully containerized with Docker & Nginx.
+
+> 📘 **Looking for comprehensive technical design docs?**  
+> Check out the exhaustive [PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md) covering database schema, ER diagrams, token refresh queue mechanics, and deployment architecture.
 
 ---
 
-## 📖 Description
+## 📑 Table of Contents
 
-The **Employee Management System (EMS)** backend is designed for HR personnel, team leaders, and administrators to handle workforce data efficiently. The architecture has transitioned away from traditional server-rendered HTML templates into a decoupled, modern API service utilizing Django REST Framework.
+- [📖 System Overview](#-system-overview)
+- [🛠️ Technology Stack](#️-technology-stack)
+- [🔐 Security & Authentication](#-security--authentication)
+- [👥 Role-Based Access Control (RBAC)](#-role-based-access-control-rbac)
+- [🚀 How to Run the Backend](#-how-to-run-the-backend)
+- [🖥️ Running the Frontend (Development Mode)](#️-running-the-frontend-development-mode)
+- [🐳 Running with Docker (Recommended)](#-running-with-docker-recommended)
+- [📡 API Reference & Endpoints](#-api-reference--endpoints)
+- [🌱 Mock Workforce Data](#-mock-workforce-data)
+- [✅ Running the Test Suite & Linters](#-running-the-test-suite--linters)
+- [📁 Project Directory Structure](#-project-directory-structure)
 
-### Key Features
+---
+
+## 📖 System Overview
+
+The **Employee Management System (EMS)** is engineered for HR departments, executive managers, and employees to coordinate organizational workflows through an API-first architecture.
+
+### Key Capabilities
 
 - **Decoupled RESTful Architecture:**
-  - Standardized JSON responses for all resources.
-  - CORS-enabled (`django-cors-headers`) for seamless connection with frontend single-page applications (React.js).
+  - Standardized JSON responses across all 11 domain models.
+  - CORS-enabled (`django-cors-headers`) for seamless connection with frontend single-page applications.
   - Django REST Framework's interactive Browsable API for in-browser testing and exploration.
 
-- **Authentication & Security:**
+- **Enterprise Authentication & Security:**
   - **JWT Authentication** (`djangorestframework-simplejwt`): short-lived access tokens (15 min) + long-lived refresh tokens (7 days) with automatic rotation and blacklisting on logout.
-  - **Custom JWT claims**: role, username, email, and employee_id are embedded in the token payload — no extra roundtrips needed.
-  - **Rate limiting**: `django-ratelimit` (5 attempts/min/IP on login) + DRF throttling (100/day anonymous, 2000/day authenticated).
+  - **Custom JWT claims**: `role`, `username`, `email`, and `employee_id` embedded in the token payload — eliminates redundant API requests.
+  - **Rate limiting**: `django-ratelimit` (5 attempts/min/IP on login) + DRF throttling (100/day anonymous, 2,000/day authenticated).
   - **Security headers**: HSTS, X-Frame-Options (DENY), X-Content-Type-Options, XSS protection.
-  - **Env-based config**: `python-decouple` — no secrets hardcoded; all settings driven from `.env` (see `.env.example`).
-  - **Strict CORS**: only explicit allowed origins in production; `CORS_ALLOW_ALL_ORIGINS` only in development.
-  - Automatic attribution: each employee record tracks who created it (`created_by`).
+  - **Env-based config**: `python-decouple` — no hardcoded credentials; settings driven from `.env`.
 
-- **Department & Employee Resource Management:**
-  - **Departments:** Full CRUD for organizational departments with computed active employee counts.
-  - **Employees:** Full CRUD supporting rich personal and employment profiles (unique Employee IDs, email validation, phone regex, age calculation, employment status, salary).
+- **Comprehensive HR Modules:**
+  - **Departments & Employees:** Full organizational hierarchy with managers, emergency contacts, banking data, soft-deletion, and CSV export.
+  - **Attendance & Timekeeping:** Daily clock-in/out, automated late flagging (>09:00 AM), remote status, and monthly work-hour recaps.
+  - **Leave Management:** 5 leave categories, day count calculation, supervisor approval/rejection workflows, and annual balances.
+  - **Payroll & Payslips:** Automated monthly generation, tax and allowance calculations, net pay derivation, and status tracking.
+  - **Performance Reviews:** 5-dimensional competency evaluations (1-5 scale), overall scoring, and employee acknowledgements.
+  - **Company Holidays & Documents:** Organization-wide calendar observances and secure multi-part document attachments.
+  - **In-App Notifications:** Real-time operational alerts for leave statuses, reviews, and payslips.
 
-- **Advanced Querying & Metrics:**
-  - Search across first name, last name, employee ID, email, and position.
-  - Filter by department ID, employment status (`FT`, `PT`, `CT`, `IN`), and active status.
-  - Safe soft-delete (`is_active=False`) with a dedicated `/restore/` endpoint and optional hard deletion (`?hard=true`).
-  - Aggregated metrics endpoint (`/api/employees/stats/`) delivering dashboard-ready analytics.
-
----
 
 ## 🛠️ Technology Stack
 
