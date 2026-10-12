@@ -11,6 +11,7 @@ import {
   Plus,
   Trash2,
   Zap,
+  Download,
 } from 'lucide-react';
 import { payrollApi, employeeApi } from '../api';
 import './Payroll.css';
@@ -51,6 +52,7 @@ export default function Payroll() {
 
   // Generate payroll state
   const [generating, setGenerating] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Create payslip modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -263,6 +265,32 @@ export default function Payroll() {
     }
   };
 
+  const handleExportCsv = async () => {
+    try {
+      setExporting(true);
+      const params = {};
+      if (employeeFilter) params.employee = employeeFilter;
+      if (yearFilter) params.year = yearFilter;
+      if (monthFilter) params.month = monthFilter;
+
+      const blob = await payrollApi.exportCsv(params);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `payroll_${yearFilter || 'all'}_${monthFilter ? MONTHS[Number(monthFilter) - 1] : 'all'}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showToast('Payroll report exported as CSV.');
+    } catch (err) {
+      console.error('Payroll CSV export failed:', err);
+      showToast('Failed to export payroll CSV report.', 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const pageSize = 15;
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
@@ -309,6 +337,14 @@ export default function Payroll() {
               <Zap size={18} />
             )}
             <span>{generating ? 'Generating...' : 'Generate Monthly Payroll'}</span>
+          </button>
+          <button onClick={handleExportCsv} className="btn btn-secondary" disabled={exporting} title="Export filtered payroll records to CSV">
+            {exporting ? (
+              <span className="spinner" style={{ width: 16, height: 16 }} />
+            ) : (
+              <Download size={18} />
+            )}
+            <span>{exporting ? 'Exporting...' : 'Export CSV'}</span>
           </button>
           <button onClick={handleOpenModal} className="btn btn-primary">
             <Plus size={18} />
