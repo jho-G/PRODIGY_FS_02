@@ -154,6 +154,22 @@ export default function Attendance() {
     );
   });
 
+  const summaryTotals = filteredSummary.reduce(
+    (acc, row) => {
+      acc.present += (row.present || 0) + (row.remote || 0);
+      acc.late += row.late || 0;
+      acc.absent += row.absent || 0;
+      acc.leave += row.on_leave || 0;
+      acc.total += row.total_days || 0;
+      return acc;
+    },
+    { present: 0, late: 0, absent: 0, leave: 0, total: 0 }
+  );
+  const companyAttendanceRate =
+    summaryTotals.total > 0
+      ? Math.round((summaryTotals.present / summaryTotals.total) * 100)
+      : 0;
+
   // Actions
   const handleCheckIn = async (record) => {
     try {
@@ -473,6 +489,42 @@ export default function Attendance() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Monthly Rollup Metric Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+            <div className="metric-card" style={{ padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+              <div className="metric-data">
+                <span className="metric-number" style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--success)' }}>
+                  {companyAttendanceRate}%
+                </span>
+                <span className="metric-title" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Overall Attendance Rate</span>
+              </div>
+            </div>
+            <div className="metric-card" style={{ padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+              <div className="metric-data">
+                <span className="metric-number" style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--primary)' }}>
+                  {summaryTotals.present}
+                </span>
+                <span className="metric-title" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Total Present Days</span>
+              </div>
+            </div>
+            <div className="metric-card" style={{ padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+              <div className="metric-data">
+                <span className="metric-number" style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--warning)' }}>
+                  {summaryTotals.late}
+                </span>
+                <span className="metric-title" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Late Check-ins</span>
+              </div>
+            </div>
+            <div className="metric-card" style={{ padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+              <div className="metric-data">
+                <span className="metric-number" style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--danger)' }}>
+                  {summaryTotals.absent}
+                </span>
+                <span className="metric-title" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Total Absences</span>
               </div>
             </div>
           </div>
