@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { createContext, useState, useEffect, useCallback, useRef } from 'react';
 import { authApi } from '../api';
 
 const AuthContext = createContext(null);
+export { AuthContext };
 
 /**
  * Decode a JWT payload without verifying the signature.
@@ -33,7 +34,7 @@ function isTokenExpiredOrExpiring(token) {
   return payload.exp < nowInSeconds + 30;
 }
 
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [accessToken, setAccessToken] = useState(
     () => localStorage.getItem('access_token') || null
   );
@@ -201,12 +202,4 @@ export const AuthProvider = ({ children }) => {
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+}
