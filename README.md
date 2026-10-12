@@ -670,6 +670,22 @@ PRODIGY_FS_02/
 
 ---
 
+## ✨ Recent Frontend & System Enhancements
+
+| Enhancement | Description | Scope |
+|---|---|---|
+| **Runtime Crash Fix** | Resolved missing `Check` icon import in `Performance.jsx`, preventing `ReferenceError` crashes. | `frontend/src/pages/Performance.jsx` |
+| **Notifications Dropdown** | Added real-time notification bell in navbar with unread count badge, dropdown tray, and mark-as-read actions. | `frontend/src/components/Layout.jsx` |
+| **Upcoming Holidays Widget** | Integrated company holiday calendar widget into Dashboard with direct leave calendar links. | `frontend/src/pages/Dashboard.jsx` |
+| **Payroll CSV Export** | Wired filtered payslip CSV export button to download instant payroll reports. | `frontend/src/pages/Payroll.jsx` |
+| **Department Search Filter** | Added real-time department name and description search filtering. | `frontend/src/pages/Departments.jsx` |
+| **Career Timeline & Documents** | Expanded Employee Profile modal with interactive Career Timeline events and multipart document management. | `frontend/src/components/EmployeeDetailModal.jsx` |
+| **Attendance Rollup & Presets** | Added executive attendance summary cards and date-range quick filters (Today, This Week, This Month). | `frontend/src/pages/Attendance.jsx` |
+| **Modal Accessibility** | Implemented Escape key dismissing and ARIA dialog semantics across all application modals. | All Modal Components |
+| **Model Synchronization** | Fixed automatic `salary_monthly` recomputation on annual salary update and flexible `hire_date` setting. | `employees/models.py` |
+
+---
+
 ## 📄 License & Attribution
 
 This project is licensed under the **MIT License**. Created as part of the Prodigy InfoTech Full-Stack Software Engineering program. See [PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md) for full architectural documentation.
