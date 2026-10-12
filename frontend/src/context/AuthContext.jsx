@@ -37,9 +37,6 @@ export const AuthProvider = ({ children }) => {
   const [accessToken, setAccessToken] = useState(
     () => localStorage.getItem('access_token') || null
   );
-  const [refreshToken, setRefreshToken] = useState(
-    () => localStorage.getItem('refresh_token') || null
-  );
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem('user');
@@ -63,7 +60,6 @@ export const AuthProvider = ({ children }) => {
     }
     if (refresh) {
       localStorage.setItem('refresh_token', refresh);
-      setRefreshToken(refresh);
     }
     if (userData) {
       localStorage.setItem('user', JSON.stringify(userData));
@@ -79,7 +75,6 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');
     setAccessToken(null);
-    setRefreshToken(null);
     setUser(null);
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
