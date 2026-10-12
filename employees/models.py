@@ -148,8 +148,8 @@ class Employee(models.Model):
     is_active = models.BooleanField(default=True)
 
     def save(self, *args, **kwargs):
-        # Keep the denormalized monthly salary in sync with the annual salary
-        if self.salary and (not self.salary_monthly or self.salary_monthly == 0):
+        # Always keep the denormalized monthly salary in sync with the annual salary
+        if self.salary:
             # Coerce to Decimal first: salary may arrive as float/int from JSON
             annual = (
                 self.salary
