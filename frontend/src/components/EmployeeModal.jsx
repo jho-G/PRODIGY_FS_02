@@ -88,6 +88,18 @@ export default function EmployeeModal({ isOpen, onClose, onSuccess, employee = n
     setGeneralError('');
   }, [employee, isOpen]);
 
+  // Accessibility: close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleChange = (e) => {
@@ -150,9 +162,10 @@ export default function EmployeeModal({ isOpen, onClose, onSuccess, employee = n
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-labelledby="employee-modal-title"
       >
         <div className="modal-header">
-          <h2 className="modal-title">
+          <h2 id="employee-modal-title" className="modal-title">
             {isEdit ? `Edit Employee (${employee.employee_id})` : 'Add New Employee'}
           </h2>
           <button
