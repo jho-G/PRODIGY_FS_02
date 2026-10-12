@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { X, Mail, Phone, MapPin, Briefcase, Wallet, CalendarDays, Award, Building2, BadgeCheck } from 'lucide-react';
 import './EmployeeDetailModal.css';
 
@@ -23,6 +24,17 @@ function InfoRow({ icon, label, value }) {
 }
 
 export default function EmployeeDetailModal({ employee, onClose }) {
+  useEffect(() => {
+    if (!employee) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [employee, onClose]);
+
   if (!employee) return null;
 
   const initials = `${employee.first_name?.[0] || ''}${employee.last_name?.[0] || ''}`;
@@ -36,9 +48,10 @@ export default function EmployeeDetailModal({ employee, onClose }) {
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-labelledby="employee-detail-title"
       >
         <div className="modal-header">
-          <h2 className="modal-title">Employee Profile</h2>
+          <h2 id="employee-detail-title" className="modal-title">Employee Profile</h2>
           <button type="button" className="modal-close-btn" onClick={onClose} title="Close">
             <X size={20} />
           </button>
