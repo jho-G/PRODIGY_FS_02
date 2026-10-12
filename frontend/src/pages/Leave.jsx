@@ -82,6 +82,18 @@ export default function Leave() {
     fetchAllEmployees();
   }, []);
 
+  // Accessibility: close modal on Escape key
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
+
   const fetchLeaves = useCallback(async () => {
     try {
       setLoading(true);
@@ -450,9 +462,15 @@ export default function Leave() {
       {/* New Leave Request Modal */}
       {isModalOpen && (
         <div className="modal-backdrop" onClick={() => setIsModalOpen(false)}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-container"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="leave-modal-title"
+          >
             <div className="modal-header">
-              <h2 className="modal-title">New Leave Request</h2>
+              <h2 id="leave-modal-title" className="modal-title">New Leave Request</h2>
               <button className="modal-close-btn" onClick={() => setIsModalOpen(false)}>
                 <X size={20} />
               </button>
