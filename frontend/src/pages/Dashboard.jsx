@@ -12,6 +12,8 @@ import {
   ArrowRight,
   PlusCircle,
   Briefcase,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import './Dashboard.css';
 
@@ -68,6 +70,24 @@ export default function Dashboard() {
           </Link>
         </div>
       </section>
+
+      {/* Error Alert with Retry */}
+      {error && (
+        <div className="alert-error" style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderRadius: 'var(--radius-md)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertTriangle size={20} color="var(--danger)" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={loadStats}
+            className="btn btn-secondary btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <RefreshCw size={14} />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
 
       {/* Top Metric Cards */}
       <section className="metrics-row">
