@@ -208,6 +208,33 @@ export default function Attendance() {
     setPage(1);
   };
 
+  const setQuickRange = (preset) => {
+    const today = new Date();
+    const toISO = (d) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    if (preset === 'today') {
+      const dStr = toISO(today);
+      setDateFrom(dStr);
+      setDateTo(dStr);
+    } else if (preset === 'week') {
+      const day = today.getDay();
+      const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(today);
+      monday.setDate(diff);
+      setDateFrom(toISO(monday));
+      setDateTo(toISO(today));
+    } else if (preset === 'month') {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      setDateFrom(toISO(firstDay));
+      setDateTo(toISO(today));
+    }
+    setPage(1);
+  };
+
   const pageSize = 15;
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
@@ -328,6 +355,36 @@ export default function Attendance() {
                 }}
                 title="To date"
               />
+
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+                  onClick={() => setQuickRange('today')}
+                  title="Filter records for today"
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+                  onClick={() => setQuickRange('week')}
+                  title="Filter records for this week"
+                >
+                  This Week
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+                  onClick={() => setQuickRange('month')}
+                  title="Filter records for this month"
+                >
+                  This Month
+                </button>
+              </div>
 
               {(employeeFilter || statusFilter || dateFrom || dateTo) && (
                 <button onClick={resetFilters} className="btn btn-secondary btn-sm">
