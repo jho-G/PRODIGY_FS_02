@@ -109,7 +109,7 @@ class Employee(models.Model):
         help_text="Direct supervisor responsible for approving this employee's leave.",
     )
     position = models.CharField(max_length=100)
-    hire_date = models.DateField(auto_now_add=True)
+    hire_date = models.DateField(default=date.today)
     employment_status = models.CharField(
         max_length=2, choices=EMPLOYMENT_STATUS, default="FT"
     )
