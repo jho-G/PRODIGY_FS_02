@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
+import { notificationApi } from '../api';
 import {
   LayoutDashboard,
   Users,
@@ -11,6 +12,7 @@ import {
   CalendarCheck,
   Banknote,
   Star,
+  Bell,
 } from 'lucide-react';
 import './Layout.css';
 
@@ -18,6 +20,75 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifs, setShowNotifs] = useState(false);
+  const notifRef = useRef(null);
+
+  const fetchUnread = async () => {
+    try {
+      const data = await notificationApi.getUnreadCount();
+      const count = typeof data === 'number' ? data : data?.count ?? data?.unread_count ?? 0;
+      setUnreadCount(count);
+    } catch {
+      // non-critical
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const data = await notificationApi.getAll();
+      const list = Array.isArray(data) ? data : data?.results || [];
+      setNotifications(list);
+    } catch (err) {
+      console.error('Failed to load notifications:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (showNotifs) {
+      fetchNotifications();
+    }
+  }, [showNotifs]);
+
+  useEffect(() => {
+    if (!showNotifs) return;
+    const handleClickOutside = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setShowNotifs(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showNotifs]);
+
+  const handleMarkRead = async (id) => {
+    try {
+      await notificationApi.markRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error('Failed to mark read:', err);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationApi.markAllRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error('Failed to mark all read:', err);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -128,6 +199,68 @@ export default function Layout() {
         </div>
 
         <div className="nav-right">
+          {/* Notification Bell & Dropdown */}
+          <div className="notification-wrapper" ref={notifRef}>
+            <button
+              type="button"
+              className="notification-btn"
+              onClick={() => setShowNotifs((prev) => !prev)}
+              title="Notifications"
+              aria-label="Notifications"
+            >
+              <Bell size={18} />
+              {unreadCount > 0 && (
+                <span className="notification-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
+              )}
+            </button>
+
+            {showNotifs && (
+              <div className="notification-dropdown">
+                <div className="notification-dropdown-header">
+                  <h4>Notifications</h4>
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleMarkAllRead}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--primary)',
+                        fontSize: '0.76rem',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+
+                <div className="notification-list">
+                  {notifications.length === 0 ? (
+                    <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                      No notifications at this time.
+                    </div>
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className={`notification-item ${!n.is_read ? 'unread' : ''}`}
+                        onClick={() => !n.is_read && handleMarkRead(n.id)}
+                      >
+                        <span className="notification-item-title">{n.title}</span>
+                        <span className="notification-item-msg">{n.message}</span>
+                        <span className="notification-item-time">
+                          {n.created_at ? new Date(n.created_at).toLocaleDateString() : ''}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="user-badge">
             <div className="user-avatar-circle">
               {user?.username ? user.username.charAt(0) : 'U'}
