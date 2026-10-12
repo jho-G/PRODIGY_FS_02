@@ -109,7 +109,7 @@ class Employee(models.Model):
         help_text="Direct supervisor responsible for approving this employee's leave.",
     )
     position = models.CharField(max_length=100)
-    hire_date = models.DateField(auto_now_add=True)
+    hire_date = models.DateField(default=date.today)
     employment_status = models.CharField(
         max_length=2, choices=EMPLOYMENT_STATUS, default="FT"
     )
@@ -148,8 +148,8 @@ class Employee(models.Model):
     is_active = models.BooleanField(default=True)
 
     def save(self, *args, **kwargs):
-        # Keep the denormalized monthly salary in sync with the annual salary
-        if self.salary and (not self.salary_monthly or self.salary_monthly == 0):
+        # Always keep the denormalized monthly salary in sync with the annual salary
+        if self.salary:
             # Coerce to Decimal first: salary may arrive as float/int from JSON
             annual = (
                 self.salary

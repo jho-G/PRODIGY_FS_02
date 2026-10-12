@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { employeeApi } from '../api';
+import { useAuth } from '../context/useAuth';
+import { employeeApi, holidayApi } from '../api';
 import {
   Users,
   Building2,
@@ -12,12 +12,16 @@ import {
   ArrowRight,
   PlusCircle,
   Briefcase,
+  AlertTriangle,
+  RefreshCw,
+  Calendar,
 } from 'lucide-react';
 import './Dashboard.css';
 
 export default function Dashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
+  const [holidays, setHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -25,8 +29,12 @@ export default function Dashboard() {
     try {
       setLoading(true);
       setError('');
-      const data = await employeeApi.getStats();
-      setStats(data);
+      const [statsData, holidayData] = await Promise.all([
+        employeeApi.getStats(),
+        holidayApi.getUpcoming(4).catch(() => []),
+      ]);
+      setStats(statsData);
+      setHolidays(Array.isArray(holidayData) ? holidayData : []);
     } catch (err) {
       console.error('Failed to load dashboard statistics:', err);
       setError('Failed to fetch workforce statistics from API.');
@@ -68,6 +76,24 @@ export default function Dashboard() {
           </Link>
         </div>
       </section>
+
+      {/* Error Alert with Retry */}
+      {error && (
+        <div className="alert-error" style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderRadius: 'var(--radius-md)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertTriangle size={20} color="var(--danger)" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={loadStats}
+            className="btn btn-secondary btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <RefreshCw size={14} />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
 
       {/* Top Metric Cards */}
       <section className="metrics-row">
@@ -197,6 +223,57 @@ export default function Dashboard() {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+
+        {/* Upcoming Holidays Widget */}
+        <div className="breakdown-card" style={{ gridColumn: 'span 2' }}>
+          <div className="breakdown-card-header">
+            <h2 className="breakdown-title">
+              <Calendar size={20} color="var(--success)" />
+              <span>Upcoming Company Holidays</span>
+            </h2>
+            <Link to="/leave" className="btn btn-secondary btn-sm">
+              <span>Leave Calendar</span>
+              <ArrowRight size={14} />
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className="empty-state">Loading holiday schedule...</div>
+          ) : holidays.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+              {holidays.map((h) => (
+                <div
+                  key={h.id}
+                  style={{
+                    padding: '14px 16px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--bg-page)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <span style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--primary)' }}>
+                    {new Date(h.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                  <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
+                    {h.name}
+                  </span>
+                  {h.description && (
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      {h.description}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">
+              No upcoming company holidays scheduled in the immediate future.
             </div>
           )}
         </div>

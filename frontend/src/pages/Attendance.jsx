@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   CalendarCheck,
-  LogIn,
-  LogOut,
   Search,
   X,
   AlertTriangle,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
-  Loader2,
   Clock,
+  LogIn,
+  LogOut,
+  Loader2,
 } from 'lucide-react';
 import { attendanceApi, employeeApi } from '../api';
 import './Attendance.css';
@@ -154,6 +154,22 @@ export default function Attendance() {
     );
   });
 
+  const summaryTotals = filteredSummary.reduce(
+    (acc, row) => {
+      acc.present += (row.present || 0) + (row.remote || 0);
+      acc.late += row.late || 0;
+      acc.absent += row.absent || 0;
+      acc.leave += row.on_leave || 0;
+      acc.total += row.total_days || 0;
+      return acc;
+    },
+    { present: 0, late: 0, absent: 0, leave: 0, total: 0 }
+  );
+  const companyAttendanceRate =
+    summaryTotals.total > 0
+      ? Math.round((summaryTotals.present / summaryTotals.total) * 100)
+      : 0;
+
   // Actions
   const handleCheckIn = async (record) => {
     try {
@@ -189,6 +205,33 @@ export default function Attendance() {
     setStatusFilter('');
     setDateFrom('');
     setDateTo('');
+    setPage(1);
+  };
+
+  const setQuickRange = (preset) => {
+    const today = new Date();
+    const toISO = (d) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    if (preset === 'today') {
+      const dStr = toISO(today);
+      setDateFrom(dStr);
+      setDateTo(dStr);
+    } else if (preset === 'week') {
+      const day = today.getDay();
+      const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(today);
+      monday.setDate(diff);
+      setDateFrom(toISO(monday));
+      setDateTo(toISO(today));
+    } else if (preset === 'month') {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      setDateFrom(toISO(firstDay));
+      setDateTo(toISO(today));
+    }
     setPage(1);
   };
 
@@ -313,6 +356,36 @@ export default function Attendance() {
                 title="To date"
               />
 
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+                  onClick={() => setQuickRange('today')}
+                  title="Filter records for today"
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+                  onClick={() => setQuickRange('week')}
+                  title="Filter records for this week"
+                >
+                  This Week
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+                  onClick={() => setQuickRange('month')}
+                  title="Filter records for this month"
+                >
+                  This Month
+                </button>
+              </div>
+
               {(employeeFilter || statusFilter || dateFrom || dateTo) && (
                 <button onClick={resetFilters} className="btn btn-secondary btn-sm">
                   <X size={14} />
@@ -334,19 +407,20 @@ export default function Attendance() {
                     <th>Check In</th>
                     <th>Check Out</th>
                     <th>Hours</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '36px' }}>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '36px' }}>
                         <div className="spinner-primary" style={{ margin: '0 auto 12px' }} />
                         <p>Loading attendance records...</p>
                       </td>
                     </tr>
                   ) : records.length === 0 ? (
                     <tr>
-                      <td colSpan="6">
+                      <td colSpan="7">
                         <div className="empty-table-state">
                           <CalendarCheck size={40} style={{ opacity: 0.4 }} />
                           <p>No attendance records match the current filters.</p>
@@ -384,6 +458,37 @@ export default function Attendance() {
                           ) : (
                             <span style={{ color: 'var(--text-muted)' }}>—</span>
                           )}
+                        </td>
+                        <td>
+                          <div className="action-buttons">
+                            {!record.check_in && (
+                              <button
+                                className="action-icon-btn btn-approve"
+                                onClick={() => handleCheckIn(record)}
+                                disabled={busyId === record.id}
+                                title="Record check-in"
+                              >
+                                {busyId === record.id
+                                  ? <Loader2 size={14} className="spin" />
+                                  : <LogIn size={14} />}
+                              </button>
+                            )}
+                            {record.check_in && !record.check_out && (
+                              <button
+                                className="action-icon-btn btn-delete"
+                                onClick={() => handleCheckOut(record)}
+                                disabled={busyId === record.id}
+                                title="Record check-out"
+                              >
+                                {busyId === record.id
+                                  ? <Loader2 size={14} className="spin" />
+                                  : <LogOut size={14} />}
+                              </button>
+                            )}
+                            {record.check_in && record.check_out && (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Done</span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -441,6 +546,42 @@ export default function Attendance() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Monthly Rollup Metric Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+            <div className="metric-card" style={{ padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+              <div className="metric-data">
+                <span className="metric-number" style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--success)' }}>
+                  {companyAttendanceRate}%
+                </span>
+                <span className="metric-title" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Overall Attendance Rate</span>
+              </div>
+            </div>
+            <div className="metric-card" style={{ padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+              <div className="metric-data">
+                <span className="metric-number" style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--primary)' }}>
+                  {summaryTotals.present}
+                </span>
+                <span className="metric-title" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Total Present Days</span>
+              </div>
+            </div>
+            <div className="metric-card" style={{ padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+              <div className="metric-data">
+                <span className="metric-number" style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--warning)' }}>
+                  {summaryTotals.late}
+                </span>
+                <span className="metric-title" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Late Check-ins</span>
+              </div>
+            </div>
+            <div className="metric-card" style={{ padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)' }}>
+              <div className="metric-data">
+                <span className="metric-number" style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--danger)' }}>
+                  {summaryTotals.absent}
+                </span>
+                <span className="metric-title" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Total Absences</span>
               </div>
             </div>
           </div>

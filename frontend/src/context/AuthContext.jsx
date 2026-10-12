@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { createContext, useState, useEffect, useCallback, useRef } from 'react';
 import { authApi } from '../api';
 
 const AuthContext = createContext(null);
+export { AuthContext };
 
 /**
  * Decode a JWT payload without verifying the signature.
@@ -33,12 +34,9 @@ function isTokenExpiredOrExpiring(token) {
   return payload.exp < nowInSeconds + 30;
 }
 
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [accessToken, setAccessToken] = useState(
     () => localStorage.getItem('access_token') || null
-  );
-  const [refreshToken, setRefreshToken] = useState(
-    () => localStorage.getItem('refresh_token') || null
   );
   const [user, setUser] = useState(() => {
     try {
@@ -63,7 +61,6 @@ export const AuthProvider = ({ children }) => {
     }
     if (refresh) {
       localStorage.setItem('refresh_token', refresh);
-      setRefreshToken(refresh);
     }
     if (userData) {
       localStorage.setItem('user', JSON.stringify(userData));
@@ -79,13 +76,17 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');
     setAccessToken(null);
-    setRefreshToken(null);
     setUser(null);
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = null;
     }
   }, []);
+
+  // Stable ref to always hold the latest scheduleTokenRefresh implementation.
+  // This avoids the React Compiler warning about reading a useCallback value
+  // during its own initialization (the recursive call inside setTimeout).
+  const scheduleTokenRefreshRef = useRef(null);
 
   /**
    * Schedule a proactive access token refresh slightly before it expires.
@@ -110,13 +111,17 @@ export const AuthProvider = ({ children }) => {
       try {
         const data = await authApi.refreshToken(storedRefresh);
         persistTokens({ access: data.access, refresh: data.refresh });
-        scheduleTokenRefresh(data.access);
+        // Use the ref to avoid a self-reference during initialization
+        scheduleTokenRefreshRef.current?.(data.access);
       } catch {
         // Refresh failed — session is truly expired, force logout
         clearSession();
       }
     }, refreshInMs);
   }, [persistTokens, clearSession]);
+
+  // Keep the ref in sync with the latest callback after every render
+  scheduleTokenRefreshRef.current = scheduleTokenRefresh;
 
   /**
    * On mount: verify the stored access token.
@@ -206,12 +211,4 @@ export const AuthProvider = ({ children }) => {
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+}

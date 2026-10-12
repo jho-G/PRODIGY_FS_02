@@ -4,6 +4,7 @@ import {
   Search,
   X,
   AlertTriangle,
+  Check,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
@@ -140,6 +141,19 @@ export default function Performance() {
   useEffect(() => {
     fetchSummary();
   }, [fetchSummary]);
+
+  // Accessibility: close modals on Escape key
+  useEffect(() => {
+    if (!detailReview && !isModalOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (detailReview) setDetailReview(null);
+        if (isModalOpen) setIsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [detailReview, isModalOpen]);
 
   // --- Workflow actions ---------------------------------------------------
   const handleComplete = async (review) => {
@@ -565,9 +579,15 @@ export default function Performance() {
       {/* Review Detail Modal */}
       {detailReview && (
         <div className="modal-backdrop" onClick={() => setDetailReview(null)}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-container"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="perf-detail-title"
+          >
             <div className="modal-header">
-              <h2 className="modal-title">
+              <h2 id="perf-detail-title" className="modal-title">
                 Review · {detailReview.employee_name} ({detailReview.review_period})
               </h2>
               <button className="modal-close-btn" onClick={() => setDetailReview(null)}>
@@ -646,9 +666,15 @@ export default function Performance() {
       {/* New Review Modal */}
       {isModalOpen && (
         <div className="modal-backdrop" onClick={() => setIsModalOpen(false)}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-container"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="perf-create-title"
+          >
             <div className="modal-header">
-              <h2 className="modal-title">New Performance Review</h2>
+              <h2 id="perf-create-title" className="modal-title">New Performance Review</h2>
               <button className="modal-close-btn" onClick={() => setIsModalOpen(false)}>
                 <X size={20} />
               </button>

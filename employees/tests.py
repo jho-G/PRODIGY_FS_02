@@ -83,6 +83,44 @@ class EmployeeModelTests(APITestCase):
             employee.effective_experience_years, 5 + employee.years_of_service
         )
 
+    def test_salary_monthly_updates_on_annual_salary_change(self):
+        employee = Employee.objects.create(
+            first_name="Hana",
+            last_name="Tadesse",
+            email="hana.tadesse@example.com",
+            date_of_birth=date(1993, 4, 15),
+            gender="F",
+            address="Addis Ababa",
+            employee_id="EMP-9004",
+            department=self.department,
+            position="Product Designer",
+            salary=60000,
+        )
+        self.assertEqual(str(employee.salary_monthly), "5000.00")
+        employee.salary = 72000
+        employee.save()
+        employee.refresh_from_db()
+        self.assertEqual(str(employee.salary_monthly), "6000.00")
+
+    def test_custom_hire_date_persisted_on_creation(self):
+        past_hire_date = date(2020, 1, 15)
+        employee = Employee.objects.create(
+            first_name="Dawit",
+            last_name="Solomon",
+            email="dawit.solomon@example.com",
+            date_of_birth=date(1988, 8, 20),
+            gender="M",
+            address="Addis Ababa",
+            employee_id="EMP-9005",
+            department=self.department,
+            position="Tech Lead",
+            salary=96000,
+            hire_date=past_hire_date,
+        )
+        employee.refresh_from_db()
+        self.assertEqual(employee.hire_date, past_hire_date)
+        self.assertGreaterEqual(employee.years_of_service, 4)
+
 
 class EmployeeAPITests(APITestCase):
     def setUp(self):
