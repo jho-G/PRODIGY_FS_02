@@ -12,8 +12,12 @@ import {
   BadgeCheck,
   History,
   TrendingUp,
+  FileText,
+  Upload,
+  Trash2,
+  ExternalLink,
 } from 'lucide-react';
-import { historyApi } from '../api';
+import { historyApi, documentApi } from '../api';
 import './EmployeeDetailModal.css';
 
 const STATUS_LABELS = {
@@ -41,6 +45,13 @@ export default function EmployeeDetailModal({ employee, onClose }) {
   const [activeTab, setActiveTab] = useState('profile');
   const [historyEvents, setHistoryEvents] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [documents, setDocuments] = useState([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [uploadDocTitle, setUploadDocTitle] = useState('');
+  const [uploadDocType, setUploadDocType] = useState('CONTRACT');
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [docError, setDocError] = useState('');
 
   useEffect(() => {
     if (!employee) return;
@@ -69,6 +80,60 @@ export default function EmployeeDetailModal({ employee, onClose }) {
     };
     fetchHistory();
   }, [employee, activeTab]);
+
+  const fetchDocuments = async () => {
+    try {
+      setLoadingDocs(true);
+      const data = await documentApi.getAll({ employee: employee.id });
+      const list = Array.isArray(data) ? data : data.results || [];
+      setDocuments(list);
+    } catch (err) {
+      console.error('Failed to load employee documents:', err);
+    } finally {
+      setLoadingDocs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!employee || activeTab !== 'documents') return;
+    fetchDocuments();
+  }, [employee, activeTab]);
+
+  const handleUploadDocument = async (e) => {
+    e.preventDefault();
+    if (!uploadDocTitle.trim() || !uploadFile) {
+      setDocError('Document title and file are required.');
+      return;
+    }
+    try {
+      setUploading(true);
+      setDocError('');
+      const formData = new FormData();
+      formData.append('employee', employee.id);
+      formData.append('title', uploadDocTitle.trim());
+      formData.append('document_type', uploadDocType);
+      formData.append('file', uploadFile);
+      await documentApi.upload(formData);
+      setUploadDocTitle('');
+      setUploadFile(null);
+      fetchDocuments();
+    } catch (err) {
+      console.error('Failed to upload document:', err);
+      setDocError('Failed to upload document.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteDocument = async (docId) => {
+    if (!window.confirm('Delete this document?')) return;
+    try {
+      await documentApi.delete(docId);
+      fetchDocuments();
+    } catch (err) {
+      console.error('Failed to delete document:', err);
+    }
+  };
 
   if (!employee) return null;
 
@@ -128,6 +193,13 @@ export default function EmployeeDetailModal({ employee, onClose }) {
               onClick={() => setActiveTab('timeline')}
             >
               Career Timeline
+            </button>
+            <button
+              type="button"
+              className={`detail-tab ${activeTab === 'documents' ? 'active' : ''}`}
+              onClick={() => setActiveTab('documents')}
+            >
+              Documents ({documents.length})
             </button>
           </div>
 
@@ -205,7 +277,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                 />
               </div>
             </>
-          ) : (
+          ) : activeTab === 'timeline' ? (
             <div style={{ padding: '8px 0' }}>
               {loadingHistory ? (
                 <div style={{ textAlign: 'center', padding: '36px' }}>
@@ -230,6 +302,120 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                         {evt.new_department_name ? ` · ${evt.new_department_name}` : ''}
                       </div>
                       {evt.notes && <div className="timeline-notes">{evt.notes}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ padding: '8px 0' }}>
+              {/* Document upload form */}
+              <form onSubmit={handleUploadDocument} className="upload-box">
+                <span style={{ fontSize: '0.85rem', fontWeight: '700', marginBottom: '8px', display: 'block' }}>
+                  Upload New Document
+                </span>
+                {docError && (
+                  <div className="alert-error" style={{ marginBottom: '10px', padding: '8px 12px', fontSize: '0.82rem' }}>
+                    {docError}
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr)) auto', gap: '8px', alignItems: 'end' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.74rem' }}>Title</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ padding: '6px 10px', fontSize: '0.84rem' }}
+                      placeholder="e.g. Contract"
+                      value={uploadDocTitle}
+                      onChange={(e) => setUploadDocTitle(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.74rem' }}>Type</label>
+                    <select
+                      className="form-select"
+                      style={{ padding: '6px 10px', fontSize: '0.84rem' }}
+                      value={uploadDocType}
+                      onChange={(e) => setUploadDocType(e.target.value)}
+                    >
+                      <option value="CONTRACT">Contract</option>
+                      <option value="ID">ID Document</option>
+                      <option value="CERTIFICATE">Certificate</option>
+                      <option value="EVALUATION">Evaluation</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.74rem' }}>File</label>
+                    <input
+                      type="file"
+                      className="form-input"
+                      style={{ padding: '4px 6px', fontSize: '0.8rem' }}
+                      onChange={(e) => setUploadFile(e.target.files[0] || null)}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="btn btn-primary btn-sm"
+                    disabled={uploading}
+                    style={{ height: '36px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Upload size={14} />
+                    <span>{uploading ? '...' : 'Upload'}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Documents List */}
+              {loadingDocs ? (
+                <div style={{ textAlign: 'center', padding: '36px' }}>
+                  <div className="spinner-primary" style={{ margin: '0 auto 10px' }} />
+                  <p>Loading documents...</p>
+                </div>
+              ) : documents.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                  <FileText size={36} style={{ opacity: 0.3, margin: '0 auto 10px' }} />
+                  <p>No documents attached to this employee profile yet.</p>
+                </div>
+              ) : (
+                <div className="document-list">
+                  {documents.map((doc) => (
+                    <div key={doc.id} className="document-item">
+                      <div className="document-meta">
+                        <div className="document-icon">
+                          <FileText size={18} />
+                        </div>
+                        <div className="document-details">
+                          <span className="document-title">{doc.title}</span>
+                          <span className="document-sub">
+                            {doc.document_type} · {doc.file_name || 'Document'} {doc.file_size ? `(${doc.file_size})` : ''}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="document-actions">
+                        {doc.file_url && (
+                          <a
+                            href={doc.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-secondary btn-sm"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 8px' }}
+                            title="Open document"
+                          >
+                            <ExternalLink size={13} />
+                            <span>View</span>
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          className="action-icon-btn btn-delete"
+                          onClick={() => handleDeleteDocument(doc.id)}
+                          title="Delete document"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
