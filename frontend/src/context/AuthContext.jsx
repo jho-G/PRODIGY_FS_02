@@ -83,6 +83,11 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Stable ref to always hold the latest scheduleTokenRefresh implementation.
+  // This avoids the React Compiler warning about reading a useCallback value
+  // during its own initialization (the recursive call inside setTimeout).
+  const scheduleTokenRefreshRef = useRef(null);
+
   /**
    * Schedule a proactive access token refresh slightly before it expires.
    * This keeps the user logged in seamlessly without waiting for a 401.
@@ -106,13 +111,17 @@ export function AuthProvider({ children }) {
       try {
         const data = await authApi.refreshToken(storedRefresh);
         persistTokens({ access: data.access, refresh: data.refresh });
-        scheduleTokenRefresh(data.access);
+        // Use the ref to avoid a self-reference during initialization
+        scheduleTokenRefreshRef.current?.(data.access);
       } catch {
         // Refresh failed — session is truly expired, force logout
         clearSession();
       }
     }, refreshInMs);
   }, [persistTokens, clearSession]);
+
+  // Keep the ref in sync with the latest callback after every render
+  scheduleTokenRefreshRef.current = scheduleTokenRefresh;
 
   /**
    * On mount: verify the stored access token.
