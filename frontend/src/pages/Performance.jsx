@@ -4,6 +4,7 @@ import {
   Search,
   X,
   AlertTriangle,
+  Check,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
