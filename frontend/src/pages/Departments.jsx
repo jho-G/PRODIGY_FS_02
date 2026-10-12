@@ -49,6 +49,18 @@ export default function Departments() {
     fetchDepartments();
   }, []);
 
+  // Accessibility: close modal on Escape key
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
+
   const handleOpenAdd = () => {
     setEditingDept(null);
     setDeptForm({ name: '', description: '' });
@@ -272,9 +284,10 @@ export default function Departments() {
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
+            aria-labelledby="dept-modal-title"
           >
             <div className="modal-header">
-              <h2 className="modal-title">
+              <h2 id="dept-modal-title" className="modal-title">
                 {editingDept ? 'Edit Department' : 'Add Department'}
               </h2>
               <button
