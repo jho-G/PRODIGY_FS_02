@@ -113,9 +113,34 @@ export default function EmployeeModal({ isOpen, onClose, onSuccess, employee = n
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitting(true);
     setErrors({});
     setGeneralError('');
+
+    const clientErrors = {};
+    if (!formData.first_name.trim()) clientErrors.first_name = ['First name is required.'];
+    if (!formData.last_name.trim()) clientErrors.last_name = ['Last name is required.'];
+    if (!formData.email.trim()) {
+      clientErrors.email = ['Email address is required.'];
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      clientErrors.email = ['Enter a valid email address.'];
+    }
+    if (formData.phone_number && !/^[+]?[0-9\s\-().]{7,20}$/.test(formData.phone_number.trim())) {
+      clientErrors.phone_number = ['Enter a valid phone number (e.g. +1 555-0199).'];
+    }
+    if (formData.salary && parseFloat(formData.salary) < 0) {
+      clientErrors.salary = ['Salary must be greater than or equal to 0.'];
+    }
+    if (formData.date_of_birth && new Date(formData.date_of_birth) > new Date()) {
+      clientErrors.date_of_birth = ['Date of birth cannot be in the future.'];
+    }
+
+    if (Object.keys(clientErrors).length > 0) {
+      setErrors(clientErrors);
+      setGeneralError('Please correct the highlighted fields before saving.');
+      return;
+    }
+
+    setSubmitting(true);
 
     const payload = {
       ...formData,
