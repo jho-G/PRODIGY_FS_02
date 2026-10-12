@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   CalendarCheck,
-  LogIn,
-  LogOut,
   Search,
   X,
   AlertTriangle,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
-  Loader2,
   Clock,
+  LogIn,
+  LogOut,
+  Loader2,
 } from 'lucide-react';
 import { attendanceApi, employeeApi } from '../api';
 import './Attendance.css';
@@ -334,19 +334,20 @@ export default function Attendance() {
                     <th>Check In</th>
                     <th>Check Out</th>
                     <th>Hours</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '36px' }}>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '36px' }}>
                         <div className="spinner-primary" style={{ margin: '0 auto 12px' }} />
                         <p>Loading attendance records...</p>
                       </td>
                     </tr>
                   ) : records.length === 0 ? (
                     <tr>
-                      <td colSpan="6">
+                      <td colSpan="7">
                         <div className="empty-table-state">
                           <CalendarCheck size={40} style={{ opacity: 0.4 }} />
                           <p>No attendance records match the current filters.</p>
@@ -384,6 +385,37 @@ export default function Attendance() {
                           ) : (
                             <span style={{ color: 'var(--text-muted)' }}>—</span>
                           )}
+                        </td>
+                        <td>
+                          <div className="action-buttons">
+                            {!record.check_in && (
+                              <button
+                                className="action-icon-btn btn-approve"
+                                onClick={() => handleCheckIn(record)}
+                                disabled={busyId === record.id}
+                                title="Record check-in"
+                              >
+                                {busyId === record.id
+                                  ? <Loader2 size={14} className="spin" />
+                                  : <LogIn size={14} />}
+                              </button>
+                            )}
+                            {record.check_in && !record.check_out && (
+                              <button
+                                className="action-icon-btn btn-delete"
+                                onClick={() => handleCheckOut(record)}
+                                disabled={busyId === record.id}
+                                title="Record check-out"
+                              >
+                                {busyId === record.id
+                                  ? <Loader2 size={14} className="spin" />
+                                  : <LogOut size={14} />}
+                              </button>
+                            )}
+                            {record.check_in && record.check_out && (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Done</span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))
