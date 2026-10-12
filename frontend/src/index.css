@@ -167,6 +167,9 @@ p {
   font-size: 0.76rem;
   font-weight: 600;
   letter-spacing: 0.2px;
+  background-color: var(--bg-page);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
 }
 
 .badge-success {
@@ -197,6 +200,37 @@ p {
   background-color: var(--info-light);
   color: #1e40af;
   border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.badge-secondary {
+  background-color: var(--accent-light);
+  color: #0e7490;
+  border: 1px solid rgba(6, 182, 212, 0.25);
+}
+
+.badge-neutral {
+  background-color: var(--bg-page);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-responsive::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+  background: var(--bg-page);
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: var(--radius-full);
 }
 
 /* Form Controls */
