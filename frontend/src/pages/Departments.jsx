@@ -8,12 +8,14 @@ import {
   X,
   AlertCircle,
   CheckCircle,
+  Search,
 } from 'lucide-react';
 import { departmentApi } from '../api';
 import './Departments.css';
 
 export default function Departments() {
   const [departments, setDepartments] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
@@ -112,6 +114,15 @@ export default function Departments() {
     }
   };
 
+  const filteredDepartments = departments.filter((dept) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      dept.name.toLowerCase().includes(q) ||
+      (dept.description && dept.description.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <div className="departments-page animate-fade-in">
       {/* Toast Feedback */}
@@ -151,6 +162,33 @@ export default function Departments() {
         </button>
       </div>
 
+      {/* Search Filter Bar */}
+      {departments.length > 0 && (
+        <div className="filter-card" style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <Search size={18} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              className="form-input"
+              style={{ paddingLeft: '40px' }}
+              placeholder="Search departments by name or description..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                title="Clear search"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Department Cards Grid */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 20px' }}>
@@ -167,9 +205,18 @@ export default function Departments() {
             <span>Create First Department</span>
           </button>
         </div>
+      ) : filteredDepartments.length === 0 ? (
+        <div className="table-card" style={{ padding: '48px', textAlign: 'center' }}>
+          <Building2 size={44} style={{ opacity: 0.3, margin: '0 auto 12px' }} />
+          <h2 style={{ fontSize: '1.2rem', marginBottom: '6px' }}>No Matching Departments</h2>
+          <p style={{ marginBottom: '18px' }}>No departments found matching &ldquo;{searchQuery}&rdquo;.</p>
+          <button onClick={() => setSearchQuery('')} className="btn btn-secondary btn-sm">
+            <span>Clear Search</span>
+          </button>
+        </div>
       ) : (
         <div className="dept-grid">
-          {departments.map((dept) => (
+          {filteredDepartments.map((dept) => (
             <div key={dept.id} className="dept-card">
               <div>
                 <div className="dept-card-top">
