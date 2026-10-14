@@ -22,7 +22,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/auth/token/verify/", "-X", "POST", "-d", "{}"]
+      # Use the dedicated /health/ endpoint — fast, no DB query
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
       interval: 30s
       timeout: 10s
       retries: 3
