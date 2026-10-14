@@ -3,8 +3,17 @@ Django settings for employee_system project.
 
 Configuration is loaded from environment variables via python-decouple.
 Copy .env.example to .env and fill in your values before running.
+
+Production deployment notes:
+  - Set DEBUG=False
+  - Set a strong SECRET_KEY (50+ random characters)
+  - Configure ALLOWED_HOSTS with your domain(s)
+  - Set CORS_ALLOWED_ORIGINS to your frontend URL
+  - Set SECURE_SSL_REDIRECT=True, SESSION_COOKIE_SECURE=True, CSRF_COOKIE_SECURE=True
+  - For PostgreSQL: pip install psycopg2-binary dj-database-url and set DATABASE_URL
 """
 
+import logging
 from datetime import timedelta
 from pathlib import Path
 
@@ -76,12 +85,39 @@ WSGI_APPLICATION = "employee_system.wsgi.application"
 # ---------------------------------------------------------------------------
 # Database
 # ---------------------------------------------------------------------------
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+# Default: SQLite for development. For production, set DATABASE_URL to
+# a PostgreSQL URL: postgres://user:password@host:5432/dbname
+# Requires: pip install dj-database-url psycopg2-binary
+_DATABASE_URL = config("DATABASE_URL", default=None)
+if _DATABASE_URL and _DATABASE_URL.startswith("postgres"):
+    try:
+        import dj_database_url
+
+        DATABASES = {
+            "default": dj_database_url.config(
+                default=_DATABASE_URL,
+                conn_max_age=600,
+                conn_health_checks=True,
+            )
+        }
+    except ImportError:
+        logging.warning(
+            "DATABASE_URL is set to PostgreSQL but dj-database-url is not installed. "
+            "Falling back to SQLite. Install: pip install dj-database-url psycopg2-binary"
+        )
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": BASE_DIR / "db.sqlite3",
+            }
+        }
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
     }
-}
 
 # ---------------------------------------------------------------------------
 # Password validation
@@ -146,6 +182,10 @@ REST_FRAMEWORK = {
         "anon": "100/day",  # unauthenticated callers
         "user": "2000/day",  # authenticated users
     },
+    # Return descriptive error codes in responses
+    "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
+    # Human-readable datetime format in responses
+    "DATETIME_FORMAT": "%Y-%m-%dT%H:%M:%SZ",
 }
 
 # django-ratelimit uses Django's cache framework; default cache is in-memory.
@@ -250,3 +290,82 @@ SECURE_BROWSER_XSS_FILTER = True
 
 # Prevent the site from being embedded in iframes (clickjacking)
 X_FRAME_OPTIONS = "DENY"
+
+# Content-Security-Policy header (handled via nginx in production;
+# this is a fallback for direct Django responses)
+# In production, tune this to your actual CDN/asset domains
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+# ---------------------------------------------------------------------------
+# Structured Logging
+# ---------------------------------------------------------------------------
+LOG_LEVEL = config("LOG_LEVEL", default="INFO" if not DEBUG else "DEBUG")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} [{name}:{lineno}] {message}",
+            "style": "{",
+        },
+        "json": {
+            # Simple JSON-like format for log aggregation tools (ELK, Datadog, etc.)
+            "format": '{{"time": "{asctime}", "level": "{levelname}", "logger": "{name}", "line": {lineno}, "message": "{message}"}}',
+            "style": "{",
+        },
+        "simple": {
+            "format": "{levelname} {message}",
+            "style": "{",
+        },
+    },
+    "filters": {
+        "require_debug_false": {
+            "()": "django.utils.log.RequireDebugFalse",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose" if DEBUG else "json",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "django.security": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "employees": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}
+
+# ---------------------------------------------------------------------------
+# File Upload Security
+# ---------------------------------------------------------------------------
+# Max upload size: 15 MB (per request)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024  # 15 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024  # 15 MB
+
+# Restrict file upload handlers to temp file (avoids RAM exhaustion on large uploads)
+FILE_UPLOAD_HANDLERS = [
+    "django.core.files.uploadhandler.TemporaryFileUploadHandler",
+]
