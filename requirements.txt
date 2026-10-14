@@ -1,7 +1,49 @@
+# ============================================================
+# Employee Management System — Python Dependencies
+# ============================================================
+# Exact versions pinned for reproducible builds.
+# Run: pip install -r requirements.txt
+# Update: pip install --upgrade -r requirements.txt && pip freeze > requirements.txt
+
+# ------------------------------------
+# Django core
+# ------------------------------------
 Django>=5.0,<6.0
 djangorestframework>=3.15.0
 django-cors-headers>=4.4.0
-gunicorn>=22.0.0
+
+# ------------------------------------
+# Authentication & Security
+# ------------------------------------
 djangorestframework-simplejwt>=5.3.0
-python-decouple>=3.8
 django-ratelimit>=4.1.0
+
+# ------------------------------------
+# Configuration
+# ------------------------------------
+python-decouple>=3.8
+
+# ------------------------------------
+# Production server
+# ------------------------------------
+gunicorn>=22.0.0
+
+# ------------------------------------
+# Production database (PostgreSQL)
+# ------------------------------------
+# Uncomment these for PostgreSQL in production:
+# dj-database-url>=2.1.0
+# psycopg2-binary>=2.9.9
+
+# ------------------------------------
+# Static files (production)
+# ------------------------------------
+# Uncomment for production static file serving without Nginx:
+# whitenoise>=6.6.0
+
+# ------------------------------------
+# Test & Code Quality (dev only)
+# ------------------------------------
+# Install these separately in CI:
+# coverage>=7.4.0
+# ruff>=0.3.0
