@@ -1,6 +1,5 @@
-from datetime import datetime
-
 from django.db.models import Avg, Count, DecimalField, Max, Q, Sum, Value
+from django.utils import timezone
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
@@ -311,7 +310,7 @@ def _filtered_employees(request):
     if min_experience:
         try:
             years = int(min_experience)
-            today = datetime.now().date()
+            today = timezone.now().date()
             cutoff = today.replace(year=today.year - years)
             queryset = queryset.filter(hire_date__lte=cutoff)
         except (ValueError, TypeError):
@@ -487,7 +486,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         employees = _filtered_employees(request).order_by("employee_id")
 
         response = HttpResponse(content_type="text/csv")
-        filename = f"employees_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"employees_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
         writer = csv.writer(response)
@@ -737,7 +736,7 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         # Only manager-level reviewers are recorded as the decision maker
         if self._can_review(leave):
             leave.reviewed_by = self.request.user
-            leave.reviewed_at = datetime.now()
+            leave.reviewed_at = timezone.now()
         leave.save(update_fields=["status", "reviewed_by", "reviewed_at", "updated_at"])
         return leave
 
@@ -903,7 +902,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 {"detail": "Check-in already recorded for this date."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        record.check_in = datetime.now().time()
+        record.check_in = timezone.now().time()
         record.save()
         return Response(
             AttendanceRecordSerializer(record).data, status=status.HTTP_200_OK
@@ -923,7 +922,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 {"detail": "Check-out already recorded for this date."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        record.check_out = datetime.now().time()
+        record.check_out = timezone.now().time()
         record.save()
         return Response(
             AttendanceRecordSerializer(record).data, status=status.HTTP_200_OK
@@ -932,7 +931,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
         """Per-employee attendance counts for a given month (default: current)."""
-        today = datetime.now().date()
+        today = timezone.now().date()
         try:
             year = int(request.query_params.get("year", today.year))
             month = int(request.query_params.get("month", today.month))
@@ -1088,7 +1087,7 @@ class PayslipViewSet(viewsets.ModelViewSet):
         )
 
         response = HttpResponse(content_type="text/csv")
-        filename = f"payroll_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"payroll_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
         writer = csv.writer(response)
