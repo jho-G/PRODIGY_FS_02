@@ -9,3 +9,6 @@ coverage>=7.4.0
 
 # Code Quality
 ruff>=0.3.0
+
+# Static file verification
+# whitenoise included via requirements.txt
