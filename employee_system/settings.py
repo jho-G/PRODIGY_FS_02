@@ -9,6 +9,7 @@ Production deployment notes:
   - Set a strong SECRET_KEY (50+ random characters)
   - Configure ALLOWED_HOSTS with your domain(s)
   - Set CORS_ALLOWED_ORIGINS to your frontend URL
+  - Set CSRF_TRUSTED_ORIGINS to your frontend and domain URLs (required by Django 4/5)
   - Set SECURE_SSL_REDIRECT=True, SESSION_COOKIE_SECURE=True, CSRF_COOKIE_SECURE=True
   - For PostgreSQL: pip install psycopg2-binary dj-database-url and set DATABASE_URL
 """
