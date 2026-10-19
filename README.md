@@ -47,7 +47,8 @@ The **Employee Management System (EMS)** is engineered for HR departments, execu
   - **JWT Authentication** (`djangorestframework-simplejwt`): short-lived access tokens (15 min) + long-lived refresh tokens (7 days) with automatic rotation and blacklisting on logout.
   - **Custom JWT claims**: `role`, `username`, `email`, and `employee_id` embedded in the token payload — eliminates redundant API requests.
   - **Rate limiting**: `django-ratelimit` (5 attempts/min/IP on login) + DRF throttling (100/day anonymous, 2,000/day authenticated).
-  - **Security headers**: HSTS, X-Frame-Options (DENY), X-Content-Type-Options, XSS protection.
+  - **Security headers**: HSTS, X-Frame-Options (DENY), X-Content-Type-Options, XSS protection, and `CSRF_TRUSTED_ORIGINS` compliance for Django 4/5.
+  - **Static & Media Pipelines**: WhiteNoise compressed & manifest static assets with Nginx reverse proxying and persistent `/media/` mounts.
   - **Env-based config**: `python-decouple` — no hardcoded credentials; settings driven from `.env`.
 
 - **Comprehensive HR Modules:**
