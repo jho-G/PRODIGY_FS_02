@@ -7,11 +7,12 @@ SSL_DIR="$DIR/frontend/ssl"
 
 mkdir -p "$SSL_DIR"
 
-echo "Generating local SSL certificate and private key..."
+echo "Generating local SSL certificate and private key with SAN extensions..."
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout "$SSL_DIR/key.pem" \
   -out "$SSL_DIR/cert.pem" \
-  -subj "/C=US/ST=Development/L=Local/O=EmployeeSystem/OU=Dev/CN=localhost"
+  -subj "/C=US/ST=Development/L=Local/O=EmployeeSystem/OU=Dev/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
 
 echo "SSL Certificate successfully generated in $SSL_DIR:"
 echo " - Certificate: $SSL_DIR/cert.pem"
