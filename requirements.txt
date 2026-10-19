@@ -38,8 +38,7 @@ gunicorn>=22.0.0
 # ------------------------------------
 # Static files (production)
 # ------------------------------------
-# Uncomment for production static file serving without Nginx:
-# whitenoise>=6.6.0
+whitenoise>=6.6.0
 
 # ------------------------------------
 # Test & Code Quality (dev only)
