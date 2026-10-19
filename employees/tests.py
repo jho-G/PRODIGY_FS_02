@@ -1525,3 +1525,11 @@ class DeploymentConfigTests(APITestCase):
             "whitenoise.middleware.WhiteNoiseMiddleware",
             settings.MIDDLEWARE,
         )
+
+    def test_staticfiles_storage_configured(self):
+        from django.conf import settings
+
+        self.assertTrue(hasattr(settings, "STORAGES"))
+        self.assertIn("staticfiles", settings.STORAGES)
+        backend = settings.STORAGES["staticfiles"].get("BACKEND", "")
+        self.assertIn("whitenoise", backend.lower())
