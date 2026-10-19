@@ -1501,3 +1501,19 @@ class IntegrationTests(APITestCase):
             employee=emp, period_year=2025, period_month=12
         )
         self.assertEqual(payslip.basic_salary, expected_monthly)
+
+
+# ---------------------------------------------------------------------------
+# Deployment Configuration Tests
+# ---------------------------------------------------------------------------
+
+
+class DeploymentConfigTests(APITestCase):
+    """Verify critical settings and middleware required for production deployment."""
+
+    def test_csrf_trusted_origins_configured(self):
+        from django.conf import settings
+
+        self.assertTrue(hasattr(settings, "CSRF_TRUSTED_ORIGINS"))
+        self.assertIsInstance(settings.CSRF_TRUSTED_ORIGINS, (list, tuple))
+        self.assertTrue(len(settings.CSRF_TRUSTED_ORIGINS) > 0)
