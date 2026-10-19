@@ -236,6 +236,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     monthly_salary = serializers.DecimalField(
         source="salary_monthly", max_digits=10, decimal_places=2, read_only=True
     )
+    is_active = serializers.BooleanField(default=True)
 
     class Meta:
         model = Employee
