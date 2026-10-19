@@ -1548,3 +1548,9 @@ class DeploymentConfigTests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["status"], "healthy")
+
+    def test_upload_memory_limits_configured(self):
+        from django.conf import settings
+
+        self.assertEqual(settings.DATA_UPLOAD_MAX_MEMORY_SIZE, 15 * 1024 * 1024)
+        self.assertEqual(settings.FILE_UPLOAD_MAX_MEMORY_SIZE, 15 * 1024 * 1024)
