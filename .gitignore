@@ -32,3 +32,9 @@ venv.bak/
 .env
 # But do track the example template:
 !.env.example
+
+# SSL Certificates & Private Keys — never commit production credentials
+*.key
+*.crt
+*.csr
+*.pfx
