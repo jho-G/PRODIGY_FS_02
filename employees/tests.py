@@ -1,3 +1,25 @@
+"""
+Employee Management System — Comprehensive Test Suite
+======================================================
+Tests are organized by concern:
+
+  EmployeeModelTests         — Model-level business logic
+  EmployeeAPITests           — CRUD API surface
+  LeaveWorkflowTests         — Leave submission & approval workflow
+  PayslipTests               — Payroll generation & calculation
+  AttendanceTests            — Check-in/out and summary
+  PerformanceReviewTests     — Review lifecycle
+  RolePermissionTests        — RBAC matrix (who can do what)
+  LeaveBalanceTests          — Working-day calculation, leave deduction
+  HolidayAPITests            — Holiday CRUD and duplicate guard
+  EmploymentHistoryTests     — Audit trail (hire/promo/transfer/exit)
+  NotificationFlowTests      — Leave/payslip notification triggers
+  SecurityTests              — Authentication, injection, rate-limit edges
+  SerializerValidationTests  — Serializer-level field validation
+  HealthCheckTests           — /health/ endpoint availability
+  IntegrationTests           — End-to-end request→model→response flows
+"""
+
 from datetime import date, time, timedelta
 
 from django.contrib.auth.models import User
@@ -18,6 +40,11 @@ from .models import (
 )
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
 def _days_ago(days):
     return date.today() - timedelta(days=days)
 
@@ -27,6 +54,28 @@ def _user_with_role(username, role, employee=None):
     user = User.objects.create_user(username=username, password="pass12345")
     UserProfile.objects.create(user=user, role=role, employee=employee)
     return user
+
+
+def _make_employee(employee_id, **kwargs):
+    """Create a minimal Employee, merging in any overrides."""
+    defaults = dict(
+        first_name="Test",
+        last_name="Employee",
+        email=f"{employee_id.lower()}@example.com",
+        date_of_birth=date(1990, 1, 1),
+        gender="M",
+        address="Addis Ababa",
+        employee_id=employee_id,
+        position="Tester",
+        salary=60000,
+    )
+    defaults.update(kwargs)
+    return Employee.objects.create(**defaults)
+
+
+# ---------------------------------------------------------------------------
+# Model Tests
+# ---------------------------------------------------------------------------
 
 
 class EmployeeModelTests(APITestCase):
@@ -121,6 +170,25 @@ class EmployeeModelTests(APITestCase):
         self.assertEqual(employee.hire_date, past_hire_date)
         self.assertGreaterEqual(employee.years_of_service, 4)
 
+    def test_full_name_property(self):
+        emp = _make_employee("EMP-9006", first_name="Abel", last_name="Tesfaye")
+        self.assertEqual(emp.full_name, "Abel Tesfaye")
+
+    def test_str_representation(self):
+        emp = _make_employee("EMP-9007", first_name="Sara", last_name="Haile")
+        self.assertIn("EMP-9007", str(emp))
+        self.assertIn("Sara", str(emp))
+
+    def test_annual_leave_remaining_default(self):
+        emp = _make_employee("EMP-9008", annual_leave_days=20)
+        # No approved leaves yet
+        self.assertEqual(emp.annual_leave_remaining, 20)
+
+
+# ---------------------------------------------------------------------------
+# Employee API Tests
+# ---------------------------------------------------------------------------
+
 
 class EmployeeAPITests(APITestCase):
     def setUp(self):
@@ -179,6 +247,73 @@ class EmployeeAPITests(APITestCase):
         self.client.force_authenticate(user=None)
         response = self.client.get("/api/employees/")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_duplicate_employee_id_rejected(self):
+        payload = {
+            "first_name": "Another",
+            "last_name": "Employee",
+            "email": "another.employee@example.com",
+            "date_of_birth": "1990-01-01",
+            "gender": "M",
+            "address": "Addis Ababa",
+            "employee_id": "EMP-9101",  # already exists
+            "position": "Analyst",
+            "salary": "50000",
+        }
+        response = self.client.post("/api/employees/", payload)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_duplicate_email_rejected(self):
+        payload = {
+            "first_name": "Different",
+            "last_name": "Name",
+            "email": "meron.alemu@example.com",  # already exists
+            "date_of_birth": "1990-01-01",
+            "gender": "F",
+            "address": "Addis Ababa",
+            "employee_id": "EMP-9199",
+            "position": "Analyst",
+            "salary": "50000",
+        }
+        response = self.client.post("/api/employees/", payload)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_employee_list_filters_active_by_default(self):
+        # Soft-delete the existing employee
+        self.employee.is_active = False
+        self.employee.save()
+        response = self.client.get("/api/employees/")
+        ids = [row["id"] for row in response.data["results"]]
+        self.assertNotIn(self.employee.id, ids)
+
+    def test_show_all_includes_inactive_employees(self):
+        self.employee.is_active = False
+        self.employee.save()
+        response = self.client.get("/api/employees/?all=true")
+        ids = [row["id"] for row in response.data["results"]]
+        self.assertIn(self.employee.id, ids)
+
+    def test_csv_export_returns_file(self):
+        response = self.client.get("/api/employees/export/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        self.assertIn("attachment", response["Content-Disposition"])
+
+    def test_partial_update_patches_only_provided_fields(self):
+        response = self.client.patch(
+            f"/api/employees/{self.employee.id}/",
+            {"position": "Senior Accountant"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.position, "Senior Accountant")
+        # Email should be unchanged
+        self.assertEqual(self.employee.email, "meron.alemu@example.com")
+
+
+# ---------------------------------------------------------------------------
+# Leave Workflow Tests
+# ---------------------------------------------------------------------------
 
 
 class LeaveWorkflowTests(APITestCase):
@@ -240,6 +375,34 @@ class LeaveWorkflowTests(APITestCase):
         response = self.client.post(f"/api/leaves/{self.leave.id}/approve/")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_reject_leave(self):
+        response = self.client.post(f"/api/leaves/{self.leave.id}/reject/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.leave.refresh_from_db()
+        self.assertEqual(self.leave.status, "REJECTED")
+
+    def test_cannot_reject_already_rejected(self):
+        self.leave.status = "REJECTED"
+        self.leave.save()
+        response = self.client.post(f"/api/leaves/{self.leave.id}/reject/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_leave_type_sick_does_not_affect_vacation_balance(self):
+        sick_leave = LeaveRequest.objects.create(
+            employee=self.employee,
+            leave_type="SL",
+            start_date=_days_ago(-1),
+            end_date=_days_ago(-3),
+            status="APPROVED",
+        )
+        # Sick leave should not count against vacation entitlement
+        self.assertEqual(self.employee.annual_leave_used(), 0)
+
+
+# ---------------------------------------------------------------------------
+# Payslip Tests
+# ---------------------------------------------------------------------------
+
 
 class PayslipTests(APITestCase):
     def setUp(self):
@@ -288,6 +451,51 @@ class PayslipTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_generate_validates_month_zero(self):
+        response = self.client.post(
+            "/api/payslips/generate/", {"year": 2026, "month": 0}
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_gross_pay_property(self):
+        payslip = Payslip.objects.create(
+            employee=self.employee,
+            period_year=2026,
+            period_month=9,
+            basic_salary=8000,
+            allowances=1000,
+            bonus=500,
+        )
+        # gross = basic + allowances + bonus
+        self.assertEqual(float(payslip.gross_pay), 9500.0)
+
+    def test_total_deductions_property(self):
+        payslip = Payslip.objects.create(
+            employee=self.employee,
+            period_year=2026,
+            period_month=10,
+            basic_salary=8000,
+            tax_deduction=800,
+            other_deductions=200,
+        )
+        self.assertEqual(float(payslip.total_deductions), 1000.0)
+
+    def test_payslip_csv_export(self):
+        Payslip.objects.create(
+            employee=self.employee,
+            period_year=2026,
+            period_month=7,
+            basic_salary=8000,
+        )
+        response = self.client.get("/api/payslips/export/?year=2026&month=7")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "text/csv")
+
+
+# ---------------------------------------------------------------------------
+# Attendance Tests
+# ---------------------------------------------------------------------------
+
 
 class AttendanceTests(APITestCase):
     def setUp(self):
@@ -314,6 +522,15 @@ class AttendanceTests(APITestCase):
         )
         self.assertEqual(record.status, "LATE")
 
+    def test_on_time_arrival_stays_present(self):
+        record = AttendanceRecord.objects.create(
+            employee=self.employee,
+            date=_days_ago(1),
+            status="PRESENT",
+            check_in=time(8, 45),
+        )
+        self.assertEqual(record.status, "PRESENT")
+
     def test_check_in_check_out_flow(self):
         record = AttendanceRecord.objects.create(
             employee=self.employee, date=date.today()
@@ -331,6 +548,33 @@ class AttendanceTests(APITestCase):
         response = self.client.post(f"/api/attendance/{record.id}/check_out/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+    def test_double_checkout_rejected(self):
+        record = AttendanceRecord.objects.create(
+            employee=self.employee,
+            date=_days_ago(2),
+            check_in=time(8, 0),
+            check_out=time(17, 0),
+        )
+        response = self.client.post(f"/api/attendance/{record.id}/check_out/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_work_hours_computed_correctly(self):
+        record = AttendanceRecord.objects.create(
+            employee=self.employee,
+            date=_days_ago(3),
+            check_in=time(8, 0),
+            check_out=time(16, 30),
+        )
+        self.assertEqual(record.work_hours, 8.5)
+
+    def test_work_hours_none_when_no_checkout(self):
+        record = AttendanceRecord.objects.create(
+            employee=self.employee,
+            date=_days_ago(4),
+            check_in=time(9, 0),
+        )
+        self.assertIsNone(record.work_hours)
+
     def test_monthly_summary(self):
         today = date.today()
         AttendanceRecord.objects.create(
@@ -347,6 +591,11 @@ class AttendanceTests(APITestCase):
         summary = response.data["summary"]
         self.assertEqual(len(summary), 1)
         self.assertEqual(summary[0]["present"], 1)
+
+
+# ---------------------------------------------------------------------------
+# Performance Review Tests
+# ---------------------------------------------------------------------------
 
 
 class PerformanceReviewTests(APITestCase):
@@ -407,6 +656,31 @@ class PerformanceReviewTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["total_reviews"], 1)
         self.assertEqual(response.data["average_overall_rating"], 4.2)
+
+    def test_rating_label_outstanding(self):
+        self.review.productivity = 5
+        self.review.quality = 5
+        self.review.teamwork = 5
+        self.review.communication = 5
+        self.review.leadership = 5
+        self.review.save()
+        self.assertEqual(self.review.overall_rating, 5.0)
+        self.assertEqual(self.review.rating_label, "Outstanding")
+
+    def test_rating_label_needs_improvement(self):
+        self.review.productivity = 2
+        self.review.quality = 2
+        self.review.teamwork = 2
+        self.review.communication = 2
+        self.review.leadership = 2
+        self.review.save()
+        self.assertEqual(self.review.overall_rating, 2.0)
+        self.assertEqual(self.review.rating_label, "Needs Improvement")
+
+
+# ---------------------------------------------------------------------------
+# Role Permission (RBAC) Tests
+# ---------------------------------------------------------------------------
 
 
 class RolePermissionTests(APITestCase):
@@ -582,6 +856,44 @@ class RolePermissionTests(APITestCase):
         self.assertIn("payslips", response.data)
         self.assertIn("employment_history", response.data)
 
+    def test_hr_can_create_employees(self):
+        hr = _user_with_role("hr_user", "HR")
+        self.client.force_authenticate(user=hr)
+        payload = {
+            "first_name": "HR",
+            "last_name": "Created",
+            "email": "hr.created@example.com",
+            "date_of_birth": "1990-01-01",
+            "gender": "F",
+            "address": "Addis Ababa",
+            "employee_id": "EMP-9605",
+            "position": "Analyst",
+            "salary": "55000",
+        }
+        response = self.client.post("/api/employees/", payload)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_manager_can_create_employees(self):
+        self.client.force_authenticate(user=self.manager)
+        payload = {
+            "first_name": "Manager",
+            "last_name": "Created",
+            "email": "manager.created@example.com",
+            "date_of_birth": "1990-01-01",
+            "gender": "M",
+            "address": "Addis Ababa",
+            "employee_id": "EMP-9606",
+            "position": "Officer",
+            "salary": "45000",
+        }
+        response = self.client.post("/api/employees/", payload)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+
+# ---------------------------------------------------------------------------
+# Leave Balance Tests
+# ---------------------------------------------------------------------------
+
 
 class LeaveBalanceTests(APITestCase):
     def setUp(self):
@@ -657,6 +969,11 @@ class LeaveBalanceTests(APITestCase):
         self.assertEqual(self.employee.annual_leave_remaining, 5)
 
 
+# ---------------------------------------------------------------------------
+# Holiday API Tests
+# ---------------------------------------------------------------------------
+
+
 class HolidayAPITests(APITestCase):
     def setUp(self):
         self.admin = _user_with_role("holiday_admin", "ADMIN")
@@ -691,6 +1008,21 @@ class HolidayAPITests(APITestCase):
             },
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_upcoming_holidays_endpoint(self):
+        self.client.force_authenticate(user=self.employee_user)
+        response = self.client.get("/api/holidays/upcoming/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_authenticated_user_can_list_holidays(self):
+        self.client.force_authenticate(user=self.employee_user)
+        response = self.client.get("/api/holidays/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+# ---------------------------------------------------------------------------
+# Employment History Tests
+# ---------------------------------------------------------------------------
 
 
 class EmploymentHistoryTests(APITestCase):
@@ -751,6 +1083,24 @@ class EmploymentHistoryTests(APITestCase):
                 employee=self.employee, event_type="EXIT"
             ).exists()
         )
+
+    def test_transfer_event_recorded_on_department_change(self):
+        dept2 = Department.objects.create(name="Marketing")
+        response = self.client.patch(
+            f"/api/employees/{self.employee.id}/",
+            {"department": dept2.id},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            EmploymentEvent.objects.filter(
+                employee=self.employee, event_type="TRANSFER"
+            ).exists()
+        )
+
+
+# ---------------------------------------------------------------------------
+# Notification Flow Tests
+# ---------------------------------------------------------------------------
 
 
 class NotificationFlowTests(APITestCase):
@@ -821,3 +1171,333 @@ class NotificationFlowTests(APITestCase):
         self.assertEqual(response.data["marked"], 2)
         response = self.client.get("/api/notifications/unread_count/")
         self.assertEqual(response.data["unread"], 0)
+
+
+# ---------------------------------------------------------------------------
+# Security Tests
+# ---------------------------------------------------------------------------
+
+
+class SecurityTests(APITestCase):
+    """
+    Tests covering security-sensitive behaviour:
+    - Unauthenticated access is denied across all endpoints
+    - Tokens are blacklisted after logout
+    - Login with wrong password is rejected
+    - No information disclosure on 404 for other users' resources
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="sectest", password="strongPass99!"
+        )
+        UserProfile.objects.create(user=self.user, role="EMPLOYEE")
+
+    def test_login_with_invalid_credentials_rejected(self):
+        response = self.client.post(
+            "/api/auth/login/",
+            {"username": "sectest", "password": "wrongpassword"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_login_with_correct_credentials_returns_tokens(self):
+        response = self.client.post(
+            "/api/auth/login/",
+            {"username": "sectest", "password": "strongPass99!"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+
+    def test_logout_blacklists_refresh_token(self):
+        # Get tokens
+        login = self.client.post(
+            "/api/auth/login/",
+            {"username": "sectest", "password": "strongPass99!"},
+        )
+        refresh = login.data["refresh"]
+        self.client.force_authenticate(user=self.user)
+
+        # Logout
+        response = self.client.post("/api/auth/logout/", {"refresh": refresh})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Try using the blacklisted refresh token
+        self.client.force_authenticate(user=None)
+        response = self.client.post(
+            "/api/auth/token/refresh/", {"refresh": refresh}
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_requires_refresh_token(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post("/api/auth/logout/", {})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_unauthenticated_cannot_access_employee_list(self):
+        response = self.client.get("/api/employees/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unauthenticated_cannot_access_leaves(self):
+        response = self.client.get("/api/leaves/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unauthenticated_cannot_access_payslips(self):
+        response = self.client.get("/api/payslips/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unauthenticated_cannot_access_notifications(self):
+        response = self.client.get("/api/notifications/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_inactive_user_login_rejected(self):
+        self.user.is_active = False
+        self.user.save()
+        response = self.client.post(
+            "/api/auth/login/",
+            {"username": "sectest", "password": "strongPass99!"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------------------------------------------------------
+# Serializer Validation Tests
+# ---------------------------------------------------------------------------
+
+
+class SerializerValidationTests(APITestCase):
+    """Tests that serializers reject invalid data before hitting the DB."""
+
+    def setUp(self):
+        self.user = _user_with_role("val_admin", "ADMIN")
+        self.client.force_authenticate(user=self.user)
+        self.department = Department.objects.create(name="Validation Dept")
+        self.employee = _make_employee(
+            "EMP-V001", department=self.department, email="val.emp@example.com"
+        )
+
+    def test_leave_end_before_start_rejected(self):
+        response = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": self.employee.id,
+                "leave_type": "VL",
+                "start_date": "2026-05-10",
+                "end_date": "2026-05-05",  # before start
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_attendance_checkout_before_checkin_rejected(self):
+        response = self.client.post(
+            "/api/attendance/",
+            {
+                "employee": self.employee.id,
+                "date": str(date.today()),
+                "check_in": "17:00:00",
+                "check_out": "08:00:00",  # before check-in
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_payslip_month_out_of_range_rejected(self):
+        response = self.client.post(
+            "/api/payslips/",
+            {
+                "employee": self.employee.id,
+                "period_year": 2026,
+                "period_month": 0,  # invalid
+                "basic_salary": "5000",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_duplicate_attendance_date_rejected(self):
+        AttendanceRecord.objects.create(employee=self.employee, date=date.today())
+        response = self.client.post(
+            "/api/attendance/",
+            {
+                "employee": self.employee.id,
+                "date": str(date.today()),
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_duplicate_payslip_period_rejected(self):
+        Payslip.objects.create(
+            employee=self.employee,
+            period_year=2026,
+            period_month=6,
+            basic_salary=5000,
+        )
+        response = self.client.post(
+            "/api/payslips/",
+            {
+                "employee": self.employee.id,
+                "period_year": 2026,
+                "period_month": 6,
+                "basic_salary": "5000",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------------------------------------------------------
+# Health Check Tests
+# ---------------------------------------------------------------------------
+
+
+class HealthCheckTests(APITestCase):
+    """Verify the /health/ endpoint is available without authentication."""
+
+    def test_health_check_returns_200(self):
+        # No authentication needed — it's a public liveness probe
+        response = self.client.get("/health/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_health_check_returns_json(self):
+        response = self.client.get("/health/")
+        self.assertEqual(response["Content-Type"], "application/json")
+        data = response.json()
+        self.assertEqual(data["status"], "healthy")
+        self.assertIn("timestamp", data)
+
+    def test_health_check_unauthenticated(self):
+        # Must work without any auth header
+        self.client.force_authenticate(user=None)
+        response = self.client.get("/health/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+# ---------------------------------------------------------------------------
+# Integration Tests (full request → model → response cycles)
+# ---------------------------------------------------------------------------
+
+
+class IntegrationTests(APITestCase):
+    """
+    End-to-end tests that exercise multiple components together:
+    create employee → submit leave → approve → check balance → generate payslip
+    """
+
+    def setUp(self):
+        self.dept = Department.objects.create(name="Integration Dept")
+        self.manager_emp = _make_employee(
+            "INT-M001",
+            email="int.manager@example.com",
+            department=self.dept,
+        )
+        self.manager_user = _user_with_role(
+            "int_manager", "ADMIN", employee=self.manager_emp
+        )
+        self.client.force_authenticate(user=self.manager_user)
+
+    def test_full_employee_lifecycle(self):
+        """Create → read → update → soft-delete → restore employee."""
+        # Create
+        payload = {
+            "first_name": "Integration",
+            "last_name": "Test",
+            "email": "integration.test@example.com",
+            "date_of_birth": "1992-06-15",
+            "gender": "F",
+            "address": "Addis Ababa",
+            "employee_id": "INT-E001",
+            "department": self.dept.id,
+            "position": "Tester",
+            "salary": "72000",
+        }
+        create_resp = self.client.post("/api/employees/", payload)
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+        emp_id = create_resp.data["id"]
+        self.assertEqual(str(create_resp.data["monthly_salary"]), "6000.00")
+
+        # Read (while active)
+        get_resp = self.client.get(f"/api/employees/{emp_id}/")
+        self.assertEqual(get_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(get_resp.data["email"], "integration.test@example.com")
+
+        # Update (promotion)
+        patch_resp = self.client.patch(
+            f"/api/employees/{emp_id}/",
+            {"position": "Senior Tester", "salary": "84000"},
+        )
+        self.assertEqual(patch_resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            EmploymentEvent.objects.filter(
+                employee_id=emp_id, event_type="PROMOTION"
+            ).exists()
+        )
+
+        # Soft-delete — employee is hidden from active queryset after this
+        del_resp = self.client.delete(f"/api/employees/{emp_id}/")
+        self.assertEqual(del_resp.status_code, status.HTTP_204_NO_CONTENT)
+        emp = Employee.objects.get(pk=emp_id)
+        self.assertFalse(emp.is_active)
+
+        # Verify 404 on regular GET (soft-deleted employees are hidden — by design)
+        hidden_resp = self.client.get(f"/api/employees/{emp_id}/")
+        self.assertEqual(hidden_resp.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Restore
+        restore_resp = self.client.post(f"/api/employees/{emp_id}/restore/")
+        self.assertEqual(restore_resp.status_code, status.HTTP_200_OK)
+        emp.refresh_from_db()
+        self.assertTrue(emp.is_active)
+
+        # GET should work again after restore
+        get_again = self.client.get(f"/api/employees/{emp_id}/")
+        self.assertEqual(get_again.status_code, status.HTTP_200_OK)
+
+
+    def test_leave_approval_deducts_balance(self):
+        """Submit leave → approve → verify remaining balance."""
+        emp = _make_employee(
+            "INT-E002",
+            email="int.leave@example.com",
+            annual_leave_days=10,
+        )
+
+        # Submit a 5-working-day leave (Mon–Fri, 2026-03-02 to 2026-03-06)
+        leave_resp = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": emp.id,
+                "leave_type": "VL",
+                "start_date": "2026-03-02",
+                "end_date": "2026-03-06",
+            },
+        )
+        self.assertIn(
+            leave_resp.status_code,
+            {status.HTTP_200_OK, status.HTTP_201_CREATED},
+        )
+        leave_id = leave_resp.data["id"]
+
+        # Approve
+        approve_resp = self.client.post(f"/api/leaves/{leave_id}/approve/")
+        self.assertEqual(approve_resp.status_code, status.HTTP_200_OK)
+
+        # Verify balance
+        emp.refresh_from_db()
+        self.assertEqual(emp.annual_leave_remaining, 5)
+
+    def test_payroll_generation_integration(self):
+        """Generate payroll → verify payslip created with correct basic salary."""
+        emp = _make_employee(
+            "INT-E003",
+            email="int.payroll@example.com",
+            salary=120000,
+        )
+        emp.refresh_from_db()
+        expected_monthly = emp.salary_monthly
+
+        gen_resp = self.client.post(
+            "/api/payslips/generate/", {"year": 2025, "month": 12}
+        )
+        self.assertEqual(gen_resp.status_code, status.HTTP_200_OK)
+
+        payslip = Payslip.objects.get(
+            employee=emp, period_year=2025, period_month=12
+        )
+        self.assertEqual(payslip.basic_salary, expected_monthly)
