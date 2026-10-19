@@ -47,6 +47,8 @@ services:
     volumes:
       # Mount SSL certificate and private key securely into Nginx
       - ./frontend/ssl:/etc/nginx/ssl:ro
+      # Mount user uploads directory so Nginx can serve files directly
+      - ./media:/usr/share/nginx/media:ro
     depends_on:
       backend:
         condition: service_healthy
