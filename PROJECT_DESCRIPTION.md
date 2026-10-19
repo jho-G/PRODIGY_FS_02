@@ -604,7 +604,10 @@ Host Server (Ports 80, 443)
 | ems_frontend Container (nginx:alpine)                       |
 |   - Serves React static build from /usr/share/nginx/html    |
 |   - Terminates TLS/SSL (Certs mounted from frontend/ssl)    |
-|   - Upstream Proxy /api/ & /admin/ -> http://backend:8000   |
+|   - Serves /media/ directly from shared volume mount        |
+|   - Proxies /static/ to backend (WhiteNoise manifest cache) |
+|   - Proxies /api/, /admin/, /health/ -> http://backend:8000 |
+|   - Enforces client_max_body_size 15M for document uploads  |
 +-------------------------------------------------------------+
        │ Docker Bridge Network (ems_network)
        ▼
