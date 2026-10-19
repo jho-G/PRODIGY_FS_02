@@ -265,7 +265,7 @@ class HolidayViewSet(viewsets.ModelViewSet):
 
     queryset = Holiday.objects.all().order_by("date")
     serializer_class = HolidaySerializer
-    permission_classes = [permissions.IsAuthenticated, IsHROrAdmin]
+    permission_classes = [IsAuthenticatedReadOnlyOrStaff]
     filter_backends = [filters.OrderingFilter, filters.SearchFilter]
     search_fields = ["name", "description"]
     ordering_fields = ["date", "name"]
