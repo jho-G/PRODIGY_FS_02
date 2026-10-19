@@ -1533,3 +1533,9 @@ class DeploymentConfigTests(APITestCase):
         self.assertIn("staticfiles", settings.STORAGES)
         backend = settings.STORAGES["staticfiles"].get("BACKEND", "")
         self.assertIn("whitenoise", backend.lower())
+
+    def test_media_files_configured(self):
+        from django.conf import settings
+
+        self.assertEqual(settings.MEDIA_URL, "/media/")
+        self.assertTrue(str(settings.MEDIA_ROOT).endswith("media"))
