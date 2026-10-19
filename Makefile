@@ -4,7 +4,7 @@
 # Usage: make <target>
 
 .PHONY: help dev test test-coverage lint fmt check-deploy \
-        migrate migrations seed superuser \
+        migrate migrations seed superuser collectstatic \
         docker-up docker-down docker-logs docker-build \
         clean ssl
 
@@ -21,6 +21,7 @@ help:
 	@echo "  make migrations     — Create new migrations"
 	@echo "  make superuser      — Create Django superuser"
 	@echo "  make seed           — Seed sample data"
+	@echo "  make collectstatic  — Collect & compress static assets"
 	@echo ""
 	@echo " Testing & Quality:"
 	@echo "  make test           — Run all unit tests"
@@ -57,6 +58,9 @@ superuser:
 
 seed:
 	python manage.py seed_employees
+
+collectstatic:
+	python manage.py collectstatic --noinput
 
 # ------------------------------------
 # Testing & Quality
