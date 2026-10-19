@@ -47,8 +47,9 @@ RUN groupadd --gid 1001 appgroup && \
 # Copy backend application source
 COPY . /app/
 
-# Ensure the app user owns all app files
-RUN chown -R appuser:appgroup /app
+# Ensure staticfiles and media directories exist with appuser ownership
+RUN mkdir -p /app/staticfiles /app/media && \
+    chown -R appuser:appgroup /app
 
 USER appuser
 
