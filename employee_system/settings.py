@@ -272,6 +272,15 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # ---------------------------------------------------------------------------
+# CSRF Trusted Origins (required for POST/PUT requests in Django 4.0+)
+# ---------------------------------------------------------------------------
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default="http://localhost:5173,http://localhost:8000,http://127.0.0.1:8000,https://localhost,https://127.0.0.1",
+    cast=Csv(),
+)
+
+# ---------------------------------------------------------------------------
 # Security Headers (hardened in production)
 # ---------------------------------------------------------------------------
 # Trust X-Forwarded-Proto header from Nginx reverse proxy
