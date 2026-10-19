@@ -1539,3 +1539,12 @@ class DeploymentConfigTests(APITestCase):
 
         self.assertEqual(settings.MEDIA_URL, "/media/")
         self.assertTrue(str(settings.MEDIA_ROOT).endswith("media"))
+
+    def test_health_check_reverse_url(self):
+        from django.urls import reverse
+
+        url = reverse("health_check")
+        self.assertEqual(url, "/health/")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["status"], "healthy")
