@@ -1517,3 +1517,11 @@ class DeploymentConfigTests(APITestCase):
         self.assertTrue(hasattr(settings, "CSRF_TRUSTED_ORIGINS"))
         self.assertIsInstance(settings.CSRF_TRUSTED_ORIGINS, (list, tuple))
         self.assertTrue(len(settings.CSRF_TRUSTED_ORIGINS) > 0)
+
+    def test_whitenoise_middleware_configured(self):
+        from django.conf import settings
+
+        self.assertIn(
+            "whitenoise.middleware.WhiteNoiseMiddleware",
+            settings.MIDDLEWARE,
+        )
