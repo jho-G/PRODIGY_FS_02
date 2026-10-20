@@ -889,6 +889,29 @@ class RolePermissionTests(APITestCase):
         response = self.client.post("/api/employees/", payload)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
+    def test_employee_cannot_see_other_employee_salary_and_bank(self):
+        self.client.force_authenticate(user=self.employee)
+        response = self.client.get(f"/api/employees/{self.manager_employee.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["salary"])
+        self.assertIsNone(response.data["monthly_salary"])
+        self.assertIsNone(response.data["salary_monthly"])
+        self.assertEqual(response.data["bank_account"], "")
+
+    def test_employee_can_see_own_salary_and_bank(self):
+        self.client.force_authenticate(user=self.employee)
+        response = self.client.get(f"/api/employees/{self.staff_employee.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(response.data["salary"])
+        self.assertEqual(float(response.data["salary"]), 50000.0)
+
+    def test_hr_can_see_all_employee_salaries(self):
+        hr = _user_with_role("hr_inspector", "HR")
+        self.client.force_authenticate(user=hr)
+        response = self.client.get(f"/api/employees/{self.staff_employee.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(float(response.data["salary"]), 50000.0)
+
 
 # ---------------------------------------------------------------------------
 # Leave Balance Tests
