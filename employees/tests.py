@@ -1656,3 +1656,159 @@ class EmployeeDocumentPermissionTests(APITestCase):
         self.assertEqual(delete_resp.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(EmployeeDocument.objects.filter(id=self.doc1.id).exists())
 
+
+class PayslipPermissionTests(APITestCase):
+    def setUp(self):
+        self.hr_user = _user_with_role("hr_payroll", "HR")
+        self.emp = Employee.objects.create(
+            first_name="Abebe",
+            last_name="Bikila",
+            email="abebe.b@example.com",
+            date_of_birth=date(1990, 1, 1),
+            gender="M",
+            address="Addis Ababa",
+            employee_id="EMP-9901",
+            position="Runner",
+            salary=70000,
+        )
+        self.emp_user = _user_with_role("emp_user_pay", "EMPLOYEE", employee=self.emp)
+        self.payslip = Payslip.objects.create(
+            employee=self.emp,
+            period_year=2026,
+            period_month=7,
+            basic_salary=5000,
+        )
+
+    def test_employee_cannot_generate_payroll(self):
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.post("/api/payslips/generate/", {"year": 2026, "month": 7})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_employee_cannot_create_payslip(self):
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.post(
+            "/api/payslips/",
+            {
+                "employee": self.emp.id,
+                "period_year": 2026,
+                "period_month": 9,
+                "basic_salary": 99999,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_employee_cannot_access_payroll_summary(self):
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.get("/api/payslips/summary/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class HolidayPermissionTests(APITestCase):
+    def setUp(self):
+        self.manager_user = _user_with_role("manager_hol", "MANAGER")
+        self.hr_user = _user_with_role("hr_hol", "HR")
+        self.holiday = Holiday.objects.create(
+            name="New Year",
+            date=date(2027, 1, 1),
+        )
+
+    def test_manager_cannot_create_or_modify_holiday(self):
+        self.client.force_authenticate(user=self.manager_user)
+        response = self.client.post(
+            "/api/holidays/",
+            {"name": "Manager Day", "date": "2027-02-01"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        delete_resp = self.client.delete(f"/api/holidays/{self.holiday.id}/")
+        self.assertEqual(delete_resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_hr_can_create_holiday(self):
+        self.client.force_authenticate(user=self.hr_user)
+        response = self.client.post(
+            "/api/holidays/",
+            {"name": "HR Day", "date": "2027-05-01"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+
+class PerformanceReviewPermissionTests(APITestCase):
+    def setUp(self):
+        self.manager = _user_with_role("mgr_rev", "MANAGER")
+        self.emp1 = Employee.objects.create(
+            first_name="Almaz",
+            last_name="Ayana",
+            email="almaz.a@example.com",
+            date_of_birth=date(1992, 3, 5),
+            gender="F",
+            address="Addis Ababa",
+            employee_id="EMP-9902",
+            position="Engineer",
+            salary=80000,
+        )
+        self.emp1_user = _user_with_role("emp1_rev", "EMPLOYEE", employee=self.emp1)
+
+        self.emp2 = Employee.objects.create(
+            first_name="Derartu",
+            last_name="Tulu",
+            email="derartu.t@example.com",
+            date_of_birth=date(1989, 4, 15),
+            gender="F",
+            address="Addis Ababa",
+            employee_id="EMP-9903",
+            position="Manager",
+            salary=85000,
+        )
+        self.emp2_user = _user_with_role("emp2_rev", "EMPLOYEE", employee=self.emp2)
+
+        self.review1 = PerformanceReview.objects.create(
+            employee=self.emp1,
+            review_period="2026-Q1",
+            productivity=5,
+            quality=5,
+            teamwork=5,
+            communication=5,
+            leadership=5,
+            status="DRAFT",
+        )
+
+    def test_employee_cannot_complete_review(self):
+        self.client.force_authenticate(user=self.emp1_user)
+        response = self.client.post(
+            f"/api/performance-reviews/{self.review1.id}/complete/"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_employee_cannot_acknowledge_other_employee_review(self):
+        self.review1.status = "COMPLETED"
+        self.review1.reviewer = self.manager
+        self.review1.save()
+
+        # Employee 2 attempts to acknowledge Employee 1's review
+        self.client.force_authenticate(user=self.emp2_user)
+        response = self.client.post(
+            f"/api/performance-reviews/{self.review1.id}/acknowledge/"
+        )
+        self.assertIn(
+            response.status_code, [status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND]
+        )
+
+    def test_employee_can_acknowledge_own_review(self):
+        self.review1.status = "COMPLETED"
+        self.review1.reviewer = self.manager
+        self.review1.save()
+
+        self.client.force_authenticate(user=self.emp1_user)
+        response = self.client.post(
+            f"/api/performance-reviews/{self.review1.id}/acknowledge/"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.review1.refresh_from_db()
+        self.assertEqual(self.review1.status, "ACKNOWLEDGED")
+
+    def test_employee_cannot_access_review_summary(self):
+        self.client.force_authenticate(user=self.emp1_user)
+        response = self.client.get("/api/performance-reviews/summary/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
