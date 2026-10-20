@@ -30,6 +30,7 @@ from .models import (
     AttendanceRecord,
     Department,
     Employee,
+    EmployeeDocument,
     EmploymentEvent,
     Holiday,
     LeaveRequest,
@@ -1577,3 +1578,81 @@ class DeploymentConfigTests(APITestCase):
 
         self.assertEqual(settings.DATA_UPLOAD_MAX_MEMORY_SIZE, 15 * 1024 * 1024)
         self.assertEqual(settings.FILE_UPLOAD_MAX_MEMORY_SIZE, 15 * 1024 * 1024)
+
+
+# ---------------------------------------------------------------------------
+# Employee Document Permission Tests
+# ---------------------------------------------------------------------------
+
+
+class EmployeeDocumentPermissionTests(APITestCase):
+    def setUp(self):
+        self.hr_user = _user_with_role("hr_doc_officer", "HR")
+        self.emp1 = Employee.objects.create(
+            first_name="Dawit",
+            last_name="Tadesse",
+            email="dawit.tadesse@example.com",
+            date_of_birth=date(1992, 3, 10),
+            gender="M",
+            address="Addis Ababa",
+            employee_id="EMP-9701",
+            position="Engineer",
+            salary=60000,
+        )
+        self.user1 = _user_with_role("user_emp1", "EMPLOYEE", employee=self.emp1)
+
+        self.emp2 = Employee.objects.create(
+            first_name="Hellen",
+            last_name="Mulugeta",
+            email="hellen.mulugeta@example.com",
+            date_of_birth=date(1993, 7, 20),
+            gender="F",
+            address="Addis Ababa",
+            employee_id="EMP-9702",
+            position="Designer",
+            salary=65000,
+        )
+        self.user2 = _user_with_role("user_emp2", "EMPLOYEE", employee=self.emp2)
+
+        self.doc1 = EmployeeDocument.objects.create(
+            employee=self.emp1,
+            document_type="CONTRACT",
+            title="Employment Contract Dawit",
+            uploaded_by=self.hr_user,
+        )
+        self.doc2 = EmployeeDocument.objects.create(
+            employee=self.emp2,
+            document_type="ID",
+            title="Passport Copy Hellen",
+            uploaded_by=self.hr_user,
+        )
+
+    def test_employee_can_only_see_own_documents(self):
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get("/api/documents/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = [d["id"] for d in response.data.get("results", response.data)]
+        self.assertIn(self.doc1.id, ids)
+        self.assertNotIn(self.doc2.id, ids)
+
+    def test_employee_cannot_delete_other_employee_document(self):
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.delete(f"/api/documents/{self.doc2.id}/")
+        # Should be 404 (because not in queryset) or 403
+        self.assertIn(
+            response.status_code, [status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN]
+        )
+        self.assertTrue(EmployeeDocument.objects.filter(id=self.doc2.id).exists())
+
+    def test_hr_can_see_and_delete_any_document(self):
+        self.client.force_authenticate(user=self.hr_user)
+        response = self.client.get("/api/documents/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = [d["id"] for d in response.data.get("results", response.data)]
+        self.assertIn(self.doc1.id, ids)
+        self.assertIn(self.doc2.id, ids)
+
+        delete_resp = self.client.delete(f"/api/documents/{self.doc1.id}/")
+        self.assertEqual(delete_resp.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(EmployeeDocument.objects.filter(id=self.doc1.id).exists())
+
