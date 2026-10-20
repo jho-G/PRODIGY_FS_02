@@ -6,7 +6,7 @@ from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
@@ -644,7 +644,7 @@ class EmploymentEventViewSet(viewsets.ReadOnlyModelViewSet):
 class EmployeeDocumentViewSet(viewsets.ModelViewSet):
     """
     Upload and manage employee documents (contracts, IDs, certificates).
-    Multipart uploads; HR/admin and the owning employee can manage.
+    Multipart uploads; HR/admin can manage all, employees can only manage their own.
     """
 
     serializer_class = EmployeeDocumentSerializer
@@ -653,10 +653,22 @@ class EmployeeDocumentViewSet(viewsets.ModelViewSet):
     ordering_fields = ["uploaded_at", "title", "document_type"]
     ordering = ["-uploaded_at"]
 
+    def _own_employee(self):
+        profile = getattr(self.request.user, "profile", None)
+        return profile.employee if profile else None
+
     def get_queryset(self):
         queryset = EmployeeDocument.objects.select_related(
             "employee", "uploaded_by"
         ).all()
+
+        user = self.request.user
+        if not is_hr_or_above(user):
+            own_emp = self._own_employee()
+            if not own_emp:
+                return queryset.none()
+            queryset = queryset.filter(employee=own_emp)
+
         employee = self.request.query_params.get("employee")
         if employee:
             queryset = queryset.filter(employee_id=employee)
@@ -666,8 +678,24 @@ class EmployeeDocumentViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        document = serializer.save(uploaded_by=self.request.user)
+        user = self.request.user
+        target_employee = serializer.validated_data.get("employee")
+        if not is_hr_or_above(user):
+            own_emp = self._own_employee()
+            if not own_emp or target_employee.id != own_emp.id:
+                raise ValidationError(
+                    {"employee": "You can only upload documents for yourself."}
+                )
+        document = serializer.save(uploaded_by=user)
         notify_document_uploaded(document)
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if not is_hr_or_above(user):
+            own_emp = self._own_employee()
+            if not own_emp or instance.employee_id != own_emp.id:
+                raise PermissionDenied("You can only delete your own documents.")
+        instance.delete()
 
 
 class LeaveRequestViewSet(viewsets.ModelViewSet):
