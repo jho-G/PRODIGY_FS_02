@@ -82,19 +82,29 @@ class EMSRefreshToken(RefreshToken):
         return token
 
 
+def get_client_ip(group, request):
+    """
+    Extract the real client IP behind reverse proxies (Nginx/ALB/Cloudflare).
+    Falls back to REMOTE_ADDR if HTTP_X_FORWARDED_FOR is not provided.
+    """
+    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    if x_forwarded_for:
+        return x_forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "127.0.0.1")
+
+
 class LoginAPIView(APIView):
     """
     User login endpoint.
     Returns a JWT access token (short-lived) and a refresh token (long-lived).
-    Rate-limited to 5 POST requests per minute per IP to prevent brute-force.
-    The client should store the refresh token securely and use it to obtain
-    new access tokens via /api/auth/token/refresh/ before expiry.
+    Rate-limited to 5 POST requests per minute per client IP to prevent brute-force.
+    Properly handles X-Forwarded-For when running behind Nginx / load balancers.
     """
 
     permission_classes = [permissions.AllowAny]
 
     @method_decorator(
-        ratelimit(key="ip", rate="5/m", method="POST", block=True),
+        ratelimit(key=get_client_ip, rate="5/m", method="POST", block=True),
         name="dispatch",
     )
     def post(self, request):
