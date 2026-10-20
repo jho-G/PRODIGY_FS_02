@@ -1030,6 +1030,18 @@ class PayslipViewSet(viewsets.ModelViewSet):
     ordering_fields = ["period_year", "period_month", "net_pay", "generated_at"]
     ordering = ["-period_year", "-period_month"]
 
+    def get_permissions(self):
+        if self.action in [
+            "create",
+            "update",
+            "partial_update",
+            "destroy",
+            "generate",
+            "summary",
+        ]:
+            return [permissions.IsAuthenticated(), IsHROrAdmin()]
+        return [permissions.IsAuthenticated()]
+
     def get_queryset(self):
         queryset = Payslip.objects.select_related(
             "employee", "employee__department"
