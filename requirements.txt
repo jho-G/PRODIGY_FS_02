@@ -31,9 +31,8 @@ gunicorn>=22.0.0
 # ------------------------------------
 # Production database (PostgreSQL)
 # ------------------------------------
-# Uncomment these for PostgreSQL in production:
-# dj-database-url>=2.1.0
-# psycopg2-binary>=2.9.9
+dj-database-url>=2.1.0
+psycopg2-binary>=2.9.9
 
 # ------------------------------------
 # Static files (production)
