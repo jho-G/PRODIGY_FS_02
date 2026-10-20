@@ -1909,4 +1909,59 @@ class LeaveBusinessLogicTests(APITestCase):
         self.assertEqual(past_leave.status, "CANCELLED")
 
 
+class AttendancePunchTests(APITestCase):
+    def setUp(self):
+        self.emp = Employee.objects.create(
+            first_name="Kenenisa",
+            last_name="Bekele",
+            email="kenenisa.b@example.com",
+            date_of_birth=date(1982, 6, 13),
+            gender="M",
+            address="Addis Ababa",
+            employee_id="EMP-9930",
+            position="Champion",
+            salary=95000,
+        )
+        self.emp_user = _user_with_role("emp_punch_user", "EMPLOYEE", employee=self.emp)
+        self.manager_user = _user_with_role("mgr_punch_user", "MANAGER")
+
+    def test_employee_punch_in_and_punch_out_flow(self):
+        self.client.force_authenticate(user=self.emp_user)
+
+        # 1. First punch creates record and records check-in
+        resp1 = self.client.post("/api/attendance/punch/")
+        self.assertIn(resp1.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertIsNotNone(resp1.data["check_in"])
+        self.assertIsNone(resp1.data["check_out"])
+
+        # 2. Second punch auto-detects check-in exists and records check-out
+        resp2 = self.client.post("/api/attendance/punch/")
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(resp2.data["check_out"])
+
+        # 3. Third punch rejected (already checked out)
+        resp3 = self.client.post("/api/attendance/punch/")
+        self.assertEqual(resp3.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_manager_can_punch_for_employee(self):
+        self.client.force_authenticate(user=self.manager_user)
+        resp = self.client.post(
+            "/api/attendance/punch/",
+            {"employee": self.emp.id, "action": "check_in"},
+        )
+        self.assertIn(resp.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertIsNotNone(resp.data["check_in"])
+
+    def test_employee_cannot_delete_attendance_record(self):
+        record = AttendanceRecord.objects.create(
+            employee=self.emp,
+            date=date(2026, 3, 1),
+            status="PRESENT",
+        )
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.delete(f"/api/attendance/{record.id}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+
 
