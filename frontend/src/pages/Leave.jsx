@@ -170,7 +170,10 @@ export default function Leave() {
 
   // --- Request form -----------------------------------------------------
   const handleOpenModal = () => {
-    setForm(EMPTY_FORM);
+    setForm({
+      ...EMPTY_FORM,
+      employee: !isManager && employeeId ? String(employeeId) : '',
+    });
     setFormError('');
     setIsModalOpen(true);
   };
@@ -498,6 +501,7 @@ export default function Leave() {
                     name="employee"
                     value={form.employee}
                     onChange={handleFormChange}
+                    disabled={!isManager}
                     required
                   >
                     <option value="">Select an employee...</option>
