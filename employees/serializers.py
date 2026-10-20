@@ -14,7 +14,7 @@ from .models import (
     Payslip,
     PerformanceReview,
 )
-from .permissions import get_role
+from .permissions import get_role, is_hr_or_above
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -313,6 +313,30 @@ class EmployeeSerializer(serializers.ModelSerializer):
                 "An employee with this email already exists."
             )
         return value
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+
+        # Redact compensation & bank data for users who are not HR/Admin and not viewing their own profile
+        can_view_confidential = False
+        if user and user.is_authenticated:
+            if is_hr_or_above(user):
+                can_view_confidential = True
+            else:
+                profile = getattr(user, "profile", None)
+                if profile and profile.employee_id == instance.id:
+                    can_view_confidential = True
+
+        if not can_view_confidential:
+            ret["salary"] = None
+            ret["monthly_salary"] = None
+            ret["salary_monthly"] = None
+            ret["bank_account"] = ""
+            ret["emergency_contact_phone"] = ""
+
+        return ret
 
 
 class LeaveRequestSerializer(serializers.ModelSerializer):
