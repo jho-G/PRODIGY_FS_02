@@ -1812,3 +1812,101 @@ class PerformanceReviewPermissionTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
+class LeaveBusinessLogicTests(APITestCase):
+    def setUp(self):
+        self.hr = _user_with_role("hr_leave_logic", "HR")
+        self.emp = Employee.objects.create(
+            first_name="Tirunesh",
+            last_name="Dibaba",
+            email="tirunesh.d@example.com",
+            date_of_birth=date(1985, 10, 1),
+            gender="F",
+            address="Addis Ababa",
+            employee_id="EMP-9920",
+            position="Athlete",
+            salary=90000,
+            annual_leave_days=30,
+        )
+        self.emp_user = _user_with_role("emp_logic_user", "EMPLOYEE", employee=self.emp)
+
+    def test_overlapping_leave_request_rejected(self):
+        self.client.force_authenticate(user=self.emp_user)
+        # Create initial leave request
+        LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2027, 4, 1),
+            end_date=date(2027, 4, 10),
+            status="PENDING",
+        )
+
+        # Attempt to create overlapping leave request via API
+        response = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": self.emp.id,
+                "leave_type": "VL",
+                "start_date": "2027-04-05",
+                "end_date": "2027-04-12",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(
+            any("overlapping" in str(msg).lower() for msg in response.data.get("non_field_errors", []))
+        )
+
+    def test_non_overlapping_leave_succeeds(self):
+        self.client.force_authenticate(user=self.emp_user)
+        LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2027, 4, 1),
+            end_date=date(2027, 4, 10),
+            status="PENDING",
+        )
+
+        # Non-overlapping window
+        response = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": self.emp.id,
+                "leave_type": "VL",
+                "start_date": "2027-05-01",
+                "end_date": "2027-05-05",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_cannot_cancel_past_leave(self):
+        past_leave = LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2026, 1, 10),
+            end_date=date(2026, 1, 15),
+            status="APPROVED",
+        )
+
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.post(f"/api/leaves/{past_leave.id}/cancel/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("cannot be cancelled", response.data["detail"])
+        past_leave.refresh_from_db()
+        self.assertEqual(past_leave.status, "APPROVED")
+
+    def test_hr_can_cancel_past_leave(self):
+        past_leave = LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2026, 1, 10),
+            end_date=date(2026, 1, 15),
+            status="APPROVED",
+        )
+
+        self.client.force_authenticate(user=self.hr)
+        response = self.client.post(f"/api/leaves/{past_leave.id}/cancel/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        past_leave.refresh_from_db()
+        self.assertEqual(past_leave.status, "CANCELLED")
+
+
+
