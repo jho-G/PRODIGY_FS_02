@@ -71,9 +71,9 @@ class EMSRefreshToken(RefreshToken):
     def for_user(cls, user):
         token = super().for_user(user)
 
-        # Embed role from UserProfile (defaults to 'EMPLOYEE' if no profile)
+        # Embed role using get_role (returns 'ADMIN' for superusers even without a profile)
         profile = getattr(user, "profile", None)
-        token["role"] = profile.role if profile else "EMPLOYEE"
+        token["role"] = get_role(user)
         token["username"] = user.username
         token["email"] = user.email
         token["full_name"] = (
