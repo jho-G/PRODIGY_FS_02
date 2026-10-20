@@ -1,7 +1,9 @@
 import axios from 'axios';
 
-// Base API URL — fallback to local Django server
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/';
+// Base API URL — ensure trailing slash to avoid concatenation bugs
+const RAW_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/';
+const API_BASE_URL = RAW_BASE_URL.endsWith('/') ? RAW_BASE_URL : `${RAW_BASE_URL}/`;
+
 
 /**
  * Pre-configured Axios instance for Employee Management System API.
