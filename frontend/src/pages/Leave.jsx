@@ -13,6 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { leaveApi, employeeApi } from '../api';
+import { useAuth } from '../context/useAuth';
 import './Leave.css';
 
 const LEAVE_TYPES = [
@@ -34,6 +35,7 @@ const EMPTY_FORM = {
 };
 
 export default function Leave() {
+  const { isManager, isHR, employeeId } = useAuth();
   const [leaves, setLeaves] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -383,7 +385,7 @@ export default function Leave() {
                     <td>{getStatusBadge(leave.status)}</td>
                     <td>
                       <div className="table-actions">
-                        {leave.status === 'PENDING' && (
+                        {leave.status === 'PENDING' && isManager && (
                           <>
                             <button
                               onClick={() => handleAction(leave, 'approve', 'approved')}
@@ -403,7 +405,7 @@ export default function Leave() {
                             </button>
                           </>
                         )}
-                        {leave.status === 'APPROVED' && (
+                        {leave.status === 'APPROVED' && (isManager || leave.employee === employeeId) && (
                           <button
                             onClick={() => handleAction(leave, 'cancel', 'cancelled')}
                             className="action-icon-btn"
@@ -413,14 +415,16 @@ export default function Leave() {
                             <Ban size={15} />
                           </button>
                         )}
-                        <button
-                          onClick={() => handleDelete(leave)}
-                          className="action-icon-btn btn-delete"
-                          disabled={busyId === leave.id}
-                          title="Delete request"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        {isHR && (
+                          <button
+                            onClick={() => handleDelete(leave)}
+                            className="action-icon-btn btn-delete"
+                            disabled={busyId === leave.id}
+                            title="Delete request"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

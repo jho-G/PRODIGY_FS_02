@@ -14,6 +14,7 @@ import {
   Download,
 } from 'lucide-react';
 import { payrollApi, employeeApi } from '../api';
+import { useAuth } from '../context/useAuth';
 import './Payroll.css';
 
 const MONTHS = [
@@ -34,6 +35,7 @@ const EMPTY_FORM = {
 };
 
 export default function Payroll() {
+  const { isHR } = useAuth();
   const [payslips, setPayslips] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -128,6 +130,7 @@ export default function Payroll() {
   }, [page, employeeFilter, yearFilter, monthFilter]);
 
   const fetchSummary = useCallback(async () => {
+    if (!isHR) return;
     try {
       const params = {};
       if (yearFilter) params.year = yearFilter;
@@ -137,7 +140,7 @@ export default function Payroll() {
     } catch (err) {
       console.error('Error fetching payroll summary:', err);
     }
-  }, [yearFilter, monthFilter]);
+  }, [isHR, yearFilter, monthFilter]);
 
   useEffect(() => {
     fetchPayslips();
@@ -330,14 +333,16 @@ export default function Payroll() {
           <p>Monthly payslips, payroll totals, and bulk generation.</p>
         </div>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <button onClick={handleGenerate} className="btn btn-secondary" disabled={generating}>
-            {generating ? (
-              <span className="spinner" style={{ width: 16, height: 16 }} />
-            ) : (
-              <Zap size={18} />
-            )}
-            <span>{generating ? 'Generating...' : 'Generate Monthly Payroll'}</span>
-          </button>
+          {isHR && (
+            <button onClick={handleGenerate} className="btn btn-secondary" disabled={generating}>
+              {generating ? (
+                <span className="spinner" style={{ width: 16, height: 16 }} />
+              ) : (
+                <Zap size={18} />
+              )}
+              <span>{generating ? 'Generating...' : 'Generate Monthly Payroll'}</span>
+            </button>
+          )}
           <button onClick={handleExportCsv} className="btn btn-secondary" disabled={exporting} title="Export filtered payroll records to CSV">
             {exporting ? (
               <span className="spinner" style={{ width: 16, height: 16 }} />
@@ -346,38 +351,42 @@ export default function Payroll() {
             )}
             <span>{exporting ? 'Exporting...' : 'Export CSV'}</span>
           </button>
-          <button onClick={handleOpenModal} className="btn btn-primary">
-            <Plus size={18} />
-            <span>Add Payslip</span>
-          </button>
+          {isHR && (
+            <button onClick={handleOpenModal} className="btn btn-primary">
+              <Plus size={18} />
+              <span>Add Payslip</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="payroll-summary-grid">
-        <div className="summary-card">
-          <div className="summary-label">Total Net Pay</div>
-          <div className="summary-value">
-            {summary ? formatMoney(summary.total_net, 'USD') : '—'}
+      {isHR && (
+        <div className="payroll-summary-grid">
+          <div className="summary-card">
+            <div className="summary-label">Total Net Pay</div>
+            <div className="summary-value">
+              {summary ? formatMoney(summary.total_net, 'USD') : '—'}
+            </div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Total Gross Pay</div>
+            <div className="summary-value">
+              {summary ? formatMoney(summary.total_gross, 'USD') : '—'}
+            </div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Total Tax Deducted</div>
+            <div className="summary-value">
+              {summary ? formatMoney(summary.total_tax, 'USD') : '—'}
+            </div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-label">Payslips Issued</div>
+            <div className="summary-value">{summary?.payslip_count ?? '—'}</div>
           </div>
         </div>
-        <div className="summary-card">
-          <div className="summary-label">Total Gross Pay</div>
-          <div className="summary-value">
-            {summary ? formatMoney(summary.total_gross, 'USD') : '—'}
-          </div>
-        </div>
-        <div className="summary-card">
-          <div className="summary-label">Total Tax Deducted</div>
-          <div className="summary-value">
-            {summary ? formatMoney(summary.total_tax, 'USD') : '—'}
-          </div>
-        </div>
-        <div className="summary-card">
-          <div className="summary-label">Payslips Issued</div>
-          <div className="summary-value">{summary?.payslip_count ?? '—'}</div>
-        </div>
-      </div>
+      )}
 
       {/* Filter Bar */}
       <div className="filter-bar">
@@ -530,14 +539,16 @@ export default function Payroll() {
                       </td>
                       <td>
                         <div className="table-actions">
-                          <button
-                            onClick={() => handleDelete(slip)}
-                            className="action-icon-btn btn-delete"
-                            disabled={busyId === slip.id}
-                            title="Delete payslip"
-                          >
-                            {busyId === slip.id ? <Loader2 size={15} /> : <Trash2 size={15} />}
-                          </button>
+                          {isHR && (
+                            <button
+                              onClick={() => handleDelete(slip)}
+                              className="action-icon-btn btn-delete"
+                              disabled={busyId === slip.id}
+                              title="Delete payslip"
+                            >
+                              {busyId === slip.id ? <Loader2 size={15} /> : <Trash2 size={15} />}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
