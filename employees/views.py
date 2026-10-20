@@ -37,8 +37,10 @@ from .permissions import (
     IsAuthenticatedReadOnlyOrHROrAdmin,
     IsAuthenticatedReadOnlyOrStaff,
     IsHROrAdmin,
+    IsManagerOrAbove,
     get_role,
     is_hr_or_above,
+    is_manager_or_above,
 )
 from .serializers import (
     AttendanceRecordSerializer,
@@ -1244,6 +1246,13 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
     ordering_fields = ["review_date", "review_period", "status", "created_at"]
     ordering = ["-review_date"]
 
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update"]:
+            return [permissions.IsAuthenticated(), IsManagerOrAbove()]
+        if self.action == "destroy":
+            return [permissions.IsAuthenticated(), IsHROrAdmin()]
+        return [permissions.IsAuthenticated()]
+
     def get_queryset(self):
         queryset = PerformanceReview.objects.select_related(
             "employee", "employee__department", "reviewer"
@@ -1280,6 +1289,13 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
         """Mark a draft review as completed; records the reviewer."""
+        if not is_manager_or_above(request.user):
+            return Response(
+                {
+                    "detail": "Only managers or HR/administrators can complete a performance review."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         review = self.get_object()
         if review.status != "DRAFT":
             return Response(
@@ -1300,6 +1316,15 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
     def acknowledge(self, request, pk=None):
         """Employee acknowledgement of a completed review."""
         review = self.get_object()
+        profile = getattr(request.user, "profile", None)
+        user_employee = profile.employee if profile else None
+        if not is_manager_or_above(request.user) and (
+            not user_employee or review.employee_id != user_employee.id
+        ):
+            return Response(
+                {"detail": "You can only acknowledge your own performance review."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if review.status != "COMPLETED":
             return Response(
                 {
@@ -1316,6 +1341,13 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def summary(self, request):
         """Aggregate review analytics: averages, distribution, top performers."""
+        if not is_manager_or_above(request.user):
+            return Response(
+                {
+                    "detail": "Only managers or HR/administrators can view performance analytics."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         reviews = list(
             PerformanceReview.objects.select_related(
                 "employee", "employee__department"
