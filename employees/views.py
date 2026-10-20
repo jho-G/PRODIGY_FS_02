@@ -907,6 +907,78 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     ordering_fields = ["date", "status", "check_in"]
     ordering = ["-date"]
 
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update"]:
+            return [permissions.IsAuthenticated(), IsManagerOrAbove()]
+        if self.action == "destroy":
+            return [permissions.IsAuthenticated(), IsHROrAdmin()]
+        return [permissions.IsAuthenticated()]
+
+    @action(detail=False, methods=["post"], url_path="punch")
+    def punch(self, request):
+        """
+        Record a check-in or check-out for today.
+        Creates an AttendanceRecord for today if none exists yet.
+        """
+        today = timezone.now().date()
+        current_time = timezone.now().time()
+
+        employee_id = request.data.get("employee")
+        if employee_id and is_manager_or_above(request.user):
+            try:
+                employee = Employee.objects.get(id=employee_id)
+            except Employee.DoesNotExist:
+                return Response(
+                    {"detail": "Employee not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        else:
+            profile = getattr(request.user, "profile", None)
+            employee = profile.employee if profile else None
+            if not employee:
+                return Response(
+                    {"detail": "No employee record associated with this account."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        record, created = AttendanceRecord.objects.get_or_create(
+            employee=employee,
+            date=today,
+            defaults={"status": "PRESENT"},
+        )
+
+        requested_action = request.data.get("action")
+        if requested_action == "check_out" or (
+            not requested_action and record.check_in and not record.check_out
+        ):
+            if not record.check_in:
+                return Response(
+                    {"detail": "Cannot check out before checking in."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if record.check_out:
+                return Response(
+                    {"detail": "Check-out already recorded for today."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            record.check_out = current_time
+            record.save()
+            return Response(
+                AttendanceRecordSerializer(record).data, status=status.HTTP_200_OK
+            )
+        else:
+            if record.check_in:
+                return Response(
+                    {"detail": "Check-in already recorded for today."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            record.check_in = current_time
+            record.save()
+            return Response(
+                AttendanceRecordSerializer(record).data,
+                status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            )
+
     def get_queryset(self):
         queryset = AttendanceRecord.objects.select_related("employee").all()
 
