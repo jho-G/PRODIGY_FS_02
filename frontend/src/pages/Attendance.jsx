@@ -199,6 +199,26 @@ export default function Attendance() {
     }
   };
 
+  const [punching, setPunching] = useState(false);
+
+  const handleQuickPunch = async () => {
+    try {
+      setPunching(true);
+      const res = await attendanceApi.punch();
+      if (res.check_out) {
+        showToast(`Clock-out recorded at ${formatTime(res.check_out)}.`);
+      } else {
+        showToast(`Clock-in recorded at ${formatTime(res.check_in)}.`);
+      }
+      fetchRecords();
+    } catch (err) {
+      console.error('Punch failed:', err);
+      showToast(err.response?.data?.detail || 'Punch failed.', 'error');
+    } finally {
+      setPunching(false);
+    }
+  };
+
   const resetFilters = () => {
     setSearch('');
     setEmployeeFilter('');
@@ -279,21 +299,36 @@ export default function Attendance() {
           <h1>Attendance</h1>
           <p>Daily check-in/out logs and monthly attendance summaries.</p>
         </div>
-        <div className="view-toggle">
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            className={`btn btn-sm ${view === 'records' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setView('records')}
+            onClick={handleQuickPunch}
+            className="btn btn-primary"
+            disabled={punching}
+            title="Clock In or Clock Out for Today"
           >
-            <CalendarCheck size={16} />
-            <span>Daily Log</span>
+            {punching ? (
+              <Loader2 size={16} className="spin" />
+            ) : (
+              <Clock size={16} />
+            )}
+            <span>{punching ? 'Recording...' : 'Clock In / Out Today'}</span>
           </button>
-          <button
-            className={`btn btn-sm ${view === 'summary' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setView('summary')}
-          >
-            <Clock size={16} />
-            <span>Monthly Summary</span>
-          </button>
+          <div className="view-toggle">
+            <button
+              className={`btn btn-sm ${view === 'records' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setView('records')}
+            >
+              <CalendarCheck size={16} />
+              <span>Daily Log</span>
+            </button>
+            <button
+              className={`btn btn-sm ${view === 'summary' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setView('summary')}
+            >
+              <Clock size={16} />
+              <span>Monthly Summary</span>
+            </button>
+          </div>
         </div>
       </div>
 
