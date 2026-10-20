@@ -396,6 +396,34 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"end_date": "End date cannot be before the start date."}
             )
+
+        employee = attrs.get("employee")
+        if not employee and instance:
+            employee = instance.employee
+        if not employee:
+            request = self.context.get("request")
+            if request and hasattr(request, "user"):
+                profile = getattr(request.user, "profile", None)
+                employee = profile.employee if profile else None
+
+        if employee and start and end:
+            overlap_qs = LeaveRequest.objects.filter(
+                employee=employee,
+                status__in=["PENDING", "APPROVED"],
+                start_date__lte=end,
+                end_date__gte=start,
+            )
+            if instance:
+                overlap_qs = overlap_qs.exclude(pk=instance.pk)
+            if overlap_qs.exists():
+                raise serializers.ValidationError(
+                    {
+                        "non_field_errors": [
+                            "You already have an active leave request overlapping these dates."
+                        ]
+                    }
+                )
+
         return attrs
 
 
