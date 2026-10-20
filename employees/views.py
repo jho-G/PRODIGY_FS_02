@@ -34,6 +34,7 @@ from .notifications import (
 from .permissions import (
     ROLE_EMPLOYEE,
     ROLE_MANAGER,
+    IsAuthenticatedReadOnlyOrHROrAdmin,
     IsAuthenticatedReadOnlyOrStaff,
     IsHROrAdmin,
     get_role,
@@ -275,7 +276,7 @@ class HolidayViewSet(viewsets.ModelViewSet):
 
     queryset = Holiday.objects.all().order_by("date")
     serializer_class = HolidaySerializer
-    permission_classes = [IsAuthenticatedReadOnlyOrStaff]
+    permission_classes = [IsAuthenticatedReadOnlyOrHROrAdmin]
     filter_backends = [filters.OrderingFilter, filters.SearchFilter]
     search_fields = ["name", "description"]
     ordering_fields = ["date", "name"]
