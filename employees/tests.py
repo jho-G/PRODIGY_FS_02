@@ -21,6 +21,7 @@ Tests are organized by concern:
 """
 
 from datetime import date, time, timedelta
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from rest_framework import status
@@ -1979,6 +1980,25 @@ class AttendancePunchTests(APITestCase):
 
         resp2_dup = self.client.post("/api/attendance/punch_out/")
         self.assertEqual(resp2_dup.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch("django.utils.timezone.now")
+    def test_punch_in_after_cutoff_flags_late(self, mock_now):
+        from datetime import datetime
+        mock_now.return_value = datetime(2026, 4, 15, 9, 30, 0)
+        self.client.force_authenticate(user=self.emp_user)
+        resp = self.client.post("/api/attendance/punch_in/")
+        self.assertIn(resp.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertEqual(resp.data["status"], "LATE")
+
+    @patch("django.utils.timezone.now")
+    def test_punch_in_before_cutoff_flags_present(self, mock_now):
+        from datetime import datetime
+        mock_now.return_value = datetime(2026, 4, 15, 8, 30, 0)
+        self.client.force_authenticate(user=self.emp_user)
+        resp = self.client.post("/api/attendance/punch_in/")
+        self.assertIn(resp.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertEqual(resp.data["status"], "PRESENT")
+
 
 
 
