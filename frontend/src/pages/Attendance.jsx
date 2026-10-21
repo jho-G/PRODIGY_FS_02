@@ -356,6 +356,70 @@ export default function Attendance() {
         </div>
       </div>
 
+      {/* Today Attendance Punch Card */}
+      <div className="attendance-today-card">
+        <div className="today-card-left">
+          <div className="today-icon-wrapper">
+            <Clock size={24} className="today-clock-icon" />
+          </div>
+          <div className="today-info">
+            <div className="today-title">
+              Today's Attendance ({new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })})
+            </div>
+            <div className="today-status-row">
+              {!todayRecord || !todayRecord.check_in ? (
+                <span className="today-status-badge status-not-started">Not clocked in today</span>
+              ) : !todayRecord.check_out ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="today-status-badge status-active">
+                    Clocked In: {formatTime(todayRecord.check_in)}
+                  </span>
+                  {statusBadge(todayRecord.status)}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="today-status-badge status-complete">
+                    Shift Done ({formatTime(todayRecord.check_in)} - {formatTime(todayRecord.check_out)})
+                  </span>
+                  {statusBadge(todayRecord.status)}
+                  {todayRecord.work_hours != null && (
+                    <span className="badge badge-info">{todayRecord.work_hours}h</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="today-card-actions">
+          {!todayRecord || !todayRecord.check_in ? (
+            <button
+              onClick={handleQuickPunch}
+              className="btn btn-primary"
+              disabled={punching}
+              title="Record Clock-In for Today"
+            >
+              {punching ? <Loader2 size={16} className="spin" /> : <LogIn size={16} />}
+              <span>{punching ? 'Recording...' : 'Clock In for Today'}</span>
+            </button>
+          ) : !todayRecord.check_out ? (
+            <button
+              onClick={handleQuickPunch}
+              className="btn btn-secondary"
+              disabled={punching}
+              title="Record Clock-Out for Today"
+            >
+              {punching ? <Loader2 size={16} className="spin" /> : <LogOut size={16} />}
+              <span>{punching ? 'Recording...' : 'Clock Out for Today'}</span>
+            </button>
+          ) : (
+            <div className="today-shift-done">
+              <CheckCircle size={18} style={{ color: 'var(--success)' }} />
+              <span>Shift Recorded</span>
+            </div>
+          )}
+        </div>
+      </div>
+
       {view === 'records' ? (
         <>
           {/* Filter Bar */}
