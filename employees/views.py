@@ -914,6 +914,26 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             return [permissions.IsAuthenticated(), IsHROrAdmin()]
         return [permissions.IsAuthenticated()]
 
+    def _resolve_punch_employee(self, request):
+        """Resolve target employee from request data or authenticated user profile."""
+        employee_id = request.data.get("employee")
+        if employee_id and is_manager_or_above(request.user):
+            try:
+                return Employee.objects.get(id=employee_id), None
+            except Employee.DoesNotExist:
+                return None, Response(
+                    {"detail": "Employee not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        profile = getattr(request.user, "profile", None)
+        employee = profile.employee if profile else None
+        if not employee:
+            return None, Response(
+                {"detail": "No employee record associated with this account."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return employee, None
+
     @action(detail=False, methods=["post"], url_path="punch")
     def punch(self, request):
         """
@@ -923,23 +943,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         today = timezone.now().date()
         current_time = timezone.now().time()
 
-        employee_id = request.data.get("employee")
-        if employee_id and is_manager_or_above(request.user):
-            try:
-                employee = Employee.objects.get(id=employee_id)
-            except Employee.DoesNotExist:
-                return Response(
-                    {"detail": "Employee not found."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-        else:
-            profile = getattr(request.user, "profile", None)
-            employee = profile.employee if profile else None
-            if not employee:
-                return Response(
-                    {"detail": "No employee record associated with this account."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        employee, error_response = self._resolve_punch_employee(request)
+        if error_response:
+            return error_response
 
         record, created = AttendanceRecord.objects.get_or_create(
             employee=employee,
