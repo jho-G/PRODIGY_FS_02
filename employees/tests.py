@@ -1878,6 +1878,23 @@ class LeaveBusinessLogicTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
+    def test_weekend_only_leave_request_rejected(self):
+        self.client.force_authenticate(user=self.emp_user)
+        # 2027-04-03 (Sat) to 2027-04-04 (Sun)
+        response = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": self.emp.id,
+                "leave_type": "VL",
+                "start_date": "2027-04-03",
+                "end_date": "2027-04-04",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(
+            any("0 working days" in str(msg).lower() for msg in response.data.get("non_field_errors", []))
+        )
+
     def test_cannot_cancel_past_leave(self):
         past_leave = LeaveRequest.objects.create(
             employee=self.emp,
