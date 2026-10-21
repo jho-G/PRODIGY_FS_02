@@ -1894,6 +1894,24 @@ class LeaveBusinessLogicTests(APITestCase):
         past_leave.refresh_from_db()
         self.assertEqual(past_leave.status, "APPROVED")
 
+    def test_cannot_cancel_leave_starting_today(self):
+        from django.utils import timezone
+        today = timezone.now().date()
+        current_leave = LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=today,
+            end_date=today + timedelta(days=3),
+            status="APPROVED",
+        )
+
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.post(f"/api/leaves/{current_leave.id}/cancel/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("cannot be cancelled", response.data["detail"])
+        current_leave.refresh_from_db()
+        self.assertEqual(current_leave.status, "APPROVED")
+
     def test_hr_can_cancel_past_leave(self):
         past_leave = LeaveRequest.objects.create(
             employee=self.emp,
