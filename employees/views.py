@@ -883,10 +883,10 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         today = timezone.now().date()
-        if leave.start_date < today and not is_hr_or_above(request.user):
+        if leave.start_date <= today and not is_hr_or_above(request.user):
             return Response(
                 {
-                    "detail": "Leave requests that have already started or passed cannot be cancelled."
+                    "detail": "Leave requests that have already commenced or passed cannot be cancelled without HR/Admin authorization."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
