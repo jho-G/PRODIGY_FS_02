@@ -278,12 +278,20 @@ export const attendanceApi = {
     const response = await api.delete(`attendance/${id}/`);
     return response.data;
   },
-  checkIn: async (id) => {
-    const response = await api.post(`attendance/${id}/check_in/`);
+  checkIn: async (id = null, data = {}) => {
+    if (id) {
+      const response = await api.post(`attendance/${id}/check_in/`, data);
+      return response.data;
+    }
+    const response = await api.post('attendance/check_in/', data);
     return response.data;
   },
-  checkOut: async (id) => {
-    const response = await api.post(`attendance/${id}/check_out/`);
+  checkOut: async (id = null, data = {}) => {
+    if (id) {
+      const response = await api.post(`attendance/${id}/check_out/`, data);
+      return response.data;
+    }
+    const response = await api.post('attendance/check_out/', data);
     return response.data;
   },
   punch: async (data = {}) => {
