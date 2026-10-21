@@ -290,6 +290,14 @@ export const attendanceApi = {
     const response = await api.post('attendance/punch/', data);
     return response.data;
   },
+  punchIn: async (data = {}) => {
+    const response = await api.post('attendance/punch_in/', data);
+    return response.data;
+  },
+  punchOut: async (data = {}) => {
+    const response = await api.post('attendance/punch_out/', data);
+    return response.data;
+  },
   // Supports query params: { year, month }
   getSummary: async (params = {}) => {
     const response = await api.get('attendance/summary/', { params });
