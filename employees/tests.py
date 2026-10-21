@@ -1780,6 +1780,36 @@ class PerformanceReviewPermissionTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_manager_cannot_complete_own_review(self):
+        mgr_emp = Employee.objects.create(
+            first_name="Manager",
+            last_name="Reviewee",
+            email="mgr.rev@example.com",
+            date_of_birth=date(1985, 1, 1),
+            gender="M",
+            address="Addis Ababa",
+            employee_id="EMP-9904",
+            position="Lead Manager",
+            salary=95000,
+        )
+        mgr_user = _user_with_role("mgr_self_rev", "MANAGER", employee=mgr_emp)
+        mgr_review = PerformanceReview.objects.create(
+            employee=mgr_emp,
+            review_period="2026-Q1",
+            productivity=5,
+            quality=5,
+            teamwork=5,
+            communication=5,
+            leadership=5,
+            status="DRAFT",
+        )
+        self.client.force_authenticate(user=mgr_user)
+        response = self.client.post(
+            f"/api/performance-reviews/{mgr_review.id}/complete/"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("cannot complete your own", response.data["detail"])
+
     def test_employee_cannot_acknowledge_other_employee_review(self):
         self.review1.status = "COMPLETED"
         self.review1.reviewer = self.manager
