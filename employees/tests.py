@@ -1999,6 +1999,18 @@ class AttendancePunchTests(APITestCase):
         self.assertIn(resp.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
         self.assertEqual(resp.data["status"], "PRESENT")
 
+    def test_check_in_and_check_out_collection_action_aliases(self):
+        self.client.force_authenticate(user=self.emp_user)
+
+        resp1 = self.client.post("/api/attendance/check_in/")
+        self.assertIn(resp1.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertIsNotNone(resp1.data["check_in"])
+
+        resp2 = self.client.post("/api/attendance/check_out/")
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(resp2.data["check_out"])
+
+
 
 
 
