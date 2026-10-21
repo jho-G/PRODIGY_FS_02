@@ -864,7 +864,11 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
-        """Cancel an approved leave request (owner, manager of the owner, HR, or admin)."""
+        """
+        Cancel an approved leave request.
+        Only uncommenced leaves (start_date > today) can be cancelled by employees or managers.
+        Commenced or past leaves require HR or Admin authorization for retroactive adjustment.
+        """
         leave = self.get_object()
         own_employee = self._own_employee()
         is_owner = own_employee and leave.employee_id == own_employee.id
