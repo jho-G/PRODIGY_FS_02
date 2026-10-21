@@ -1017,6 +1017,39 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
+    @action(detail=False, methods=["post"], url_path="punch_out")
+    def punch_out(self, request):
+        """
+        Record check-out for today.
+        Requires an AttendanceRecord with check_in already recorded.
+        """
+        today = timezone.now().date()
+        current_time = timezone.now().time()
+
+        employee, error_response = self._resolve_punch_employee(request)
+        if error_response:
+            return error_response
+
+        record = AttendanceRecord.objects.filter(employee=employee, date=today).first()
+        if not record or not record.check_in:
+            return Response(
+                {"detail": "Cannot check out before checking in."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if record.check_out:
+            return Response(
+                {"detail": "Check-out already recorded for today."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        record.check_out = current_time
+        record.save()
+        return Response(
+            AttendanceRecordSerializer(record).data,
+            status=status.HTTP_200_OK,
+        )
+
     def get_queryset(self):
         queryset = AttendanceRecord.objects.select_related("employee").all()
 
