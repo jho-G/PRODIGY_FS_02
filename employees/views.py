@@ -1050,6 +1050,11 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=False, methods=["post"], url_path="check_in")
+    def check_in_today(self, request):
+        """Dedicated collection action for check-in on today's record."""
+        return self.punch_in(request)
+
     def get_queryset(self):
         queryset = AttendanceRecord.objects.select_related("employee").all()
 
