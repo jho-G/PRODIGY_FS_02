@@ -398,6 +398,20 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
                 {"end_date": "End date cannot be before the start date."}
             )
 
+        if start and end:
+            holidays = Holiday.objects.filter(
+                date__gte=start, date__lte=end
+            ).values_list("date", flat=True)
+            work_days = working_days_between(start, end, holiday_dates=holidays)
+            if work_days == 0:
+                raise serializers.ValidationError(
+                    {
+                        "non_field_errors": [
+                            "The selected date range contains 0 working days (falls entirely on weekends or company holidays)."
+                        ]
+                    }
+                )
+
         employee = attrs.get("employee")
         if not employee and instance:
             employee = instance.employee
