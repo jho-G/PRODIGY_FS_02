@@ -978,6 +978,10 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                     {"detail": "Check-in already recorded for today."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            if current_time > AttendanceRecord.LATE_CUTOFF:
+                record.status = "LATE"
+            else:
+                record.status = "PRESENT"
             record.check_in = current_time
             record.save()
             return Response(
@@ -1010,6 +1014,10 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if current_time > AttendanceRecord.LATE_CUTOFF:
+            record.status = "LATE"
+        else:
+            record.status = "PRESENT"
         record.check_in = current_time
         record.save()
         return Response(
@@ -1104,7 +1112,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 {"detail": "Check-in already recorded for this date."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        record.check_in = timezone.now().time()
+        current_time = timezone.now().time()
+        if current_time > AttendanceRecord.LATE_CUTOFF:
+            record.status = "LATE"
+        else:
+            record.status = "PRESENT"
+        record.check_in = current_time
         record.save()
         return Response(
             AttendanceRecordSerializer(record).data, status=status.HTTP_200_OK
