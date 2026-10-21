@@ -205,6 +205,12 @@ class Employee(models.Model):
         """Entitlement minus approved vacation days for the current year."""
         return max(self.annual_leave_days - self.annual_leave_used(), 0)
 
+    @property
+    def user(self):
+        """User account linked to this employee via UserProfile (if any)."""
+        account = getattr(self, "user_account", None)
+        return account.user if account else None
+
 
 def working_days_between(start_date, end_date, holiday_dates=None):
     """
