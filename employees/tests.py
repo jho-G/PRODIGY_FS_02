@@ -615,6 +615,9 @@ class PerformanceReviewTests(APITestCase):
             position="UI/UX Designer",
             salary=84000,
         )
+        self.emp_user = _user_with_role(
+            "kalkidan_rev", "EMPLOYEE", employee=self.employee
+        )
         self.review = PerformanceReview.objects.create(
             employee=self.employee,
             review_period="2026-Q3",
@@ -638,6 +641,14 @@ class PerformanceReviewTests(APITestCase):
         self.assertEqual(self.review.status, "COMPLETED")
         self.assertEqual(self.review.reviewer, self.user)
 
+        # Manager cannot acknowledge someone else's review
+        mgr_ack = self.client.post(
+            f"/api/performance-reviews/{self.review.id}/acknowledge/"
+        )
+        self.assertEqual(mgr_ack.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Evaluated employee acknowledges their own review
+        self.client.force_authenticate(user=self.emp_user)
         response = self.client.post(
             f"/api/performance-reviews/{self.review.id}/acknowledge/"
         )
@@ -646,6 +657,7 @@ class PerformanceReviewTests(APITestCase):
         self.assertEqual(self.review.status, "ACKNOWLEDGED")
 
     def test_cannot_acknowledge_draft(self):
+        self.client.force_authenticate(user=self.emp_user)
         response = self.client.post(
             f"/api/performance-reviews/{self.review.id}/acknowledge/"
         )
