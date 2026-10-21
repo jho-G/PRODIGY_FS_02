@@ -1425,7 +1425,7 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
     ordering = ["-review_date"]
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update"]:
+        if self.action in ["create", "update", "partial_update", "complete"]:
             return [permissions.IsAuthenticated(), IsManagerOrAbove()]
         if self.action == "destroy":
             return [permissions.IsAuthenticated(), IsHROrAdmin()]
