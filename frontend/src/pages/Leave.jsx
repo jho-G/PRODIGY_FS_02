@@ -412,8 +412,15 @@ export default function Leave() {
                           <button
                             onClick={() => handleAction(leave, 'cancel', 'cancelled')}
                             className="action-icon-btn"
-                            disabled={busyId === leave.id}
-                            title="Cancel approved leave"
+                            disabled={
+                              busyId === leave.id ||
+                              (!isHR && leave.start_date <= new Date().toISOString().split('T')[0])
+                            }
+                            title={
+                              !isHR && leave.start_date <= new Date().toISOString().split('T')[0]
+                                ? 'Commenced leave requires HR/Admin authorization to cancel'
+                                : 'Cancel approved leave'
+                            }
                           >
                             <Ban size={15} />
                           </button>
