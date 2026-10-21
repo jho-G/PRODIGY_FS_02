@@ -417,9 +417,16 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
             employee = instance.employee
         if not employee:
             request = self.context.get("request")
-            if request and hasattr(request, "user"):
-                profile = getattr(request.user, "profile", None)
-                employee = profile.employee if profile else None
+            if request:
+                raw_emp = getattr(request, "data", {}).get("employee") if hasattr(request, "data") else None
+                if raw_emp:
+                    try:
+                        employee = Employee.objects.get(id=raw_emp)
+                    except (Employee.DoesNotExist, ValueError):
+                        pass
+                if not employee and hasattr(request, "user"):
+                    profile = getattr(request.user, "profile", None)
+                    employee = profile.employee if profile else None
 
         if employee and start and end:
             overlap_qs = LeaveRequest.objects.filter(
