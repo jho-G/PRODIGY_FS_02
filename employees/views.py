@@ -1475,6 +1475,15 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
         review = self.get_object()
+        profile = getattr(request.user, "profile", None)
+        user_employee = profile.employee if profile else None
+        if (review.employee.user and review.employee.user == request.user) or (
+            user_employee and user_employee.id == review.employee_id
+        ):
+            return Response(
+                {"detail": "You cannot complete your own performance review."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if review.status != "DRAFT":
             return Response(
                 {
