@@ -1856,6 +1856,46 @@ class LeaveBusinessLogicTests(APITestCase):
             any("overlapping" in str(msg).lower() for msg in response.data.get("non_field_errors", []))
         )
 
+    def test_overlapping_with_approved_leave_rejected(self):
+        self.client.force_authenticate(user=self.emp_user)
+        LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2027, 7, 1),
+            end_date=date(2027, 7, 10),
+            status="APPROVED",
+        )
+        response = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": self.emp.id,
+                "leave_type": "VL",
+                "start_date": "2027-07-05",
+                "end_date": "2027-07-15",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_overlap_allowed_with_cancelled_or_rejected_leave(self):
+        self.client.force_authenticate(user=self.emp_user)
+        LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2027, 8, 1),
+            end_date=date(2027, 8, 10),
+            status="CANCELLED",
+        )
+        response = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": self.emp.id,
+                "leave_type": "VL",
+                "start_date": "2027-08-02",
+                "end_date": "2027-08-06",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
     def test_non_overlapping_leave_succeeds(self):
         self.client.force_authenticate(user=self.emp_user)
         LeaveRequest.objects.create(
