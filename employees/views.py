@@ -1505,9 +1505,11 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
         review = self.get_object()
         profile = getattr(request.user, "profile", None)
         user_employee = profile.employee if profile else None
-        if not is_manager_or_above(request.user) and (
-            not user_employee or review.employee_id != user_employee.id
-        ):
+        is_evaluated_employee = (
+            (review.employee.user and review.employee.user == request.user)
+            or (user_employee and review.employee_id == user_employee.id)
+        )
+        if not is_evaluated_employee:
             return Response(
                 {"detail": "You can only acknowledge your own performance review."},
                 status=status.HTTP_403_FORBIDDEN,
