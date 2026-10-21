@@ -1962,6 +1962,25 @@ class AttendancePunchTests(APITestCase):
         response = self.client.delete(f"/api/attendance/{record.id}/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_dedicated_punch_in_and_punch_out_endpoints(self):
+        self.client.force_authenticate(user=self.emp_user)
+
+        resp1 = self.client.post("/api/attendance/punch_in/")
+        self.assertIn(resp1.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertIsNotNone(resp1.data["check_in"])
+        self.assertIsNone(resp1.data["check_out"])
+
+        resp1_dup = self.client.post("/api/attendance/punch_in/")
+        self.assertEqual(resp1_dup.status_code, status.HTTP_400_BAD_REQUEST)
+
+        resp2 = self.client.post("/api/attendance/punch_out/")
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(resp2.data["check_out"])
+
+        resp2_dup = self.client.post("/api/attendance/punch_out/")
+        self.assertEqual(resp2_dup.status_code, status.HTTP_400_BAD_REQUEST)
+
+
 
 
 
