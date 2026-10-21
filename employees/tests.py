@@ -1916,16 +1916,19 @@ class LeaveBusinessLogicTests(APITestCase):
         past_leave = LeaveRequest.objects.create(
             employee=self.emp,
             leave_type="VL",
-            start_date=date(2026, 1, 10),
-            end_date=date(2026, 1, 15),
+            start_date=date(2026, 1, 12),
+            end_date=date(2026, 1, 16),
             status="APPROVED",
         )
+        initial_used = self.emp.annual_leave_used()
+        self.assertGreater(initial_used, 0)
 
         self.client.force_authenticate(user=self.hr)
         response = self.client.post(f"/api/leaves/{past_leave.id}/cancel/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         past_leave.refresh_from_db()
         self.assertEqual(past_leave.status, "CANCELLED")
+        self.assertEqual(self.emp.annual_leave_used(), 0)
 
 
 class AttendancePunchTests(APITestCase):
