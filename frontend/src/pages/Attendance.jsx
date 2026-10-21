@@ -368,7 +368,10 @@ export default function Attendance() {
             </div>
             <div className="today-status-row">
               {!todayRecord || !todayRecord.check_in ? (
-                <span className="today-status-badge status-not-started">Not clocked in today</span>
+                <>
+                  <span className="today-status-badge status-not-started">Not clocked in today</span>
+                  <span className="today-cutoff-note">• Check-ins after 09:00 AM auto-flag as Late</span>
+                </>
               ) : !todayRecord.check_out ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span className="today-status-badge status-active">
