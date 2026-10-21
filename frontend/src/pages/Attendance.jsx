@@ -13,6 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { attendanceApi, employeeApi } from '../api';
+import { useAuth } from '../context/useAuth';
 import './Attendance.css';
 
 const STATUS_OPTIONS = ['PRESENT', 'LATE', 'ABSENT', 'LEAVE', 'REMOTE'];
@@ -29,10 +30,12 @@ const statusBadge = (status) => {
 };
 
 export default function Attendance() {
+  const { user, employeeId } = useAuth();
   // View toggle: 'records' = daily log, 'summary' = per-employee month counts
   const [view, setView] = useState('records');
 
   const [records, setRecords] = useState([]);
+  const [todayRecord, setTodayRecord] = useState(null);
   const [summary, setSummary] = useState([]);
   const [summaryMeta, setSummaryMeta] = useState({ year: null, month: null });
   const [employees, setEmployees] = useState([]);
@@ -59,6 +62,27 @@ export default function Attendance() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
+
+  const fetchTodayRecord = useCallback(async () => {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const params = { date: todayStr };
+      if (employeeId) params.employee = employeeId;
+      const data = await attendanceApi.getAll(params);
+      const results = data.results || (Array.isArray(data) ? data : []);
+      if (results.length > 0) {
+        setTodayRecord(results[0]);
+      } else {
+        setTodayRecord(null);
+      }
+    } catch (err) {
+      console.warn('Could not fetch today attendance record:', err);
+    }
+  }, [employeeId]);
+
+  useEffect(() => {
+    fetchTodayRecord();
+  }, [fetchTodayRecord]);
 
   // Debounce employee-name search
   useEffect(() => {
