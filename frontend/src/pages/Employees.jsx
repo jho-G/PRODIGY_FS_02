@@ -214,6 +214,7 @@ export default function Employees() {
 
   // Soft Delete (Deactivate)
   const handleSoftDelete = async (employee) => {
+    if (!isHR) return;
     const confirmed = window.confirm(
       `Are you sure you want to deactivate employee "${employee.full_name || employee.first_name} ${employee.last_name}" (${employee.employee_id})?`
     );
@@ -231,6 +232,7 @@ export default function Employees() {
 
   // Restore Deactivated Employee
   const handleRestore = async (employee) => {
+    if (!isHR) return;
     try {
       await employeeApi.restore(employee.id);
       showToast(`Employee ${employee.full_name} has been restored to active status.`);
