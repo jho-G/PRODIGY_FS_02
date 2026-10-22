@@ -196,6 +196,7 @@ export default function Performance() {
   };
 
   const handleDelete = async (review) => {
+    if (!isHR) return;
     const confirmed = window.confirm(
       `Delete the ${review.review_period} review for ${review.employee_name}?`
     );
@@ -540,14 +541,16 @@ export default function Performance() {
                             {busyId === review.id ? <Loader2 size={15} /> : <Check size={15} />}
                           </button>
                         )}
-                        <button
-                          onClick={() => handleDelete(review)}
-                          className="action-icon-btn btn-delete"
-                          disabled={busyId === review.id}
-                          title="Delete review"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        {isHR && (
+                          <button
+                            onClick={() => handleDelete(review)}
+                            className="action-icon-btn btn-delete"
+                            disabled={busyId === review.id}
+                            title="Delete review"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
