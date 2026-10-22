@@ -430,21 +430,23 @@ export default function Attendance() {
           {/* Filter Bar */}
           <div className="filter-bar">
             <div className="filter-row">
-              <select
-                className="filter-select"
-                value={employeeFilter}
-                onChange={(e) => {
-                  setEmployeeFilter(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">All Employees</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.full_name} ({emp.employee_id})
-                  </option>
-                ))}
-              </select>
+              {isManager && (
+                <select
+                  className="filter-select"
+                  value={employeeFilter}
+                  onChange={(e) => {
+                    setEmployeeFilter(e.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">All Employees</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.full_name} ({emp.employee_id})
+                    </option>
+                  ))}
+                </select>
+              )}
 
               <select
                 className="filter-select"
