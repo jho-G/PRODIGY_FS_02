@@ -1,8 +1,20 @@
 import axios from 'axios';
 
-// Base API URL — ensure trailing slash to avoid concatenation bugs
-const RAW_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/';
-const API_BASE_URL = RAW_BASE_URL.endsWith('/') ? RAW_BASE_URL : `${RAW_BASE_URL}/`;
+/**
+ * Sanitize API base URL to ensure a guaranteed single trailing slash,
+ * preventing silent concatenation bugs when endpoints are appended.
+ * @param {string|undefined} url
+ * @returns {string} Sanitized base URL ending with exactly one slash
+ */
+export function sanitizeApiBaseUrl(url) {
+  if (!url || typeof url !== 'string') {
+    return 'http://127.0.0.1:8000/api/';
+  }
+  const trimmed = url.trim();
+  return trimmed.replace(/\/+$/, '') + '/';
+}
+
+export const API_BASE_URL = sanitizeApiBaseUrl(import.meta.env.VITE_API_URL);
 
 
 /**
