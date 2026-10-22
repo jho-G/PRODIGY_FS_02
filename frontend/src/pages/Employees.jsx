@@ -245,6 +245,7 @@ export default function Employees() {
 
   // Permanent Hard Delete (optional safeguard)
   const handleHardDelete = async (employee) => {
+    if (!isAdmin) return;
     const confirmed = window.confirm(
       `WARNING: Permanently delete employee "${employee.full_name}"? This action cannot be undone.`
     );
