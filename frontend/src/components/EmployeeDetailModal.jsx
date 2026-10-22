@@ -18,6 +18,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { historyApi, documentApi } from '../api';
+import { useAuth } from '../context/useAuth';
 import './EmployeeDetailModal.css';
 
 const STATUS_LABELS = {
@@ -42,6 +43,7 @@ function InfoRow({ icon, label, value }) {
 }
 
 export default function EmployeeDetailModal({ employee, onClose }) {
+  const { isHR } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const [historyEvents, setHistoryEvents] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
