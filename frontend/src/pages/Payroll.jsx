@@ -163,6 +163,7 @@ export default function Payroll() {
 
   // --- Actions -----------------------------------------------------------
   const handleGenerate = async () => {
+    if (!isHR) return;
     const [year, month] = summaryMonthParts;
     const confirmed = window.confirm(
       `Generate payslips for all active employees for ${MONTHS[month - 1]} ${year}? Existing payslips for that period will be recalculated.`
@@ -185,6 +186,7 @@ export default function Payroll() {
   };
 
   const handleDelete = async (slip) => {
+    if (!isHR) return;
     const confirmed = window.confirm(
       `Delete the ${slip.period_label} payslip for ${slip.employee_name}?`
     );
@@ -210,6 +212,7 @@ export default function Payroll() {
 
   // --- Create form -------------------------------------------------------
   const handleOpenModal = () => {
+    if (!isHR) return;
     setForm(EMPTY_FORM);
     setFormError('');
     setIsModalOpen(true);
@@ -231,6 +234,10 @@ export default function Payroll() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isHR) {
+      setFormError('You do not have permission to create payslips.');
+      return;
+    }
     if (!form.employee || !form.basic_salary) {
       setFormError('Employee and basic salary are required.');
       return;
@@ -391,21 +398,23 @@ export default function Payroll() {
       {/* Filter Bar */}
       <div className="filter-bar">
         <div className="filter-row">
-          <select
-            className="filter-select"
-            value={employeeFilter}
-            onChange={(e) => {
-              setEmployeeFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">All Employees</option>
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {emp.full_name} ({emp.employee_id})
-              </option>
-            ))}
-          </select>
+          {isHR && (
+            <select
+              className="filter-select"
+              value={employeeFilter}
+              onChange={(e) => {
+                setEmployeeFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All Employees</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.full_name} ({emp.employee_id})
+                </option>
+              ))}
+            </select>
+          )}
 
           <select
             className="filter-select"
@@ -468,20 +477,20 @@ export default function Payroll() {
                 <th>Bonus</th>
                 <th>Deductions</th>
                 <th>Net Pay</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                {isHR && <th style={{ textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="8" style={{ textAlign: 'center', padding: '36px' }}>
+                  <td colSpan={isHR ? 8 : 7} style={{ textAlign: 'center', padding: '36px' }}>
                     <div className="spinner-primary" style={{ margin: '0 auto 12px' }} />
                     <p>Loading payslips...</p>
                   </td>
                 </tr>
               ) : visiblePayslips.length === 0 ? (
                 <tr>
-                  <td colSpan="8">
+                  <td colSpan={isHR ? 8 : 7}>
                     <div className="empty-table-state">
                       <Banknote size={40} style={{ opacity: 0.4 }} />
                       <p>No payslips match the current filters.</p>
@@ -537,9 +546,9 @@ export default function Payroll() {
                           {formatMoney(slip.net_pay, slip.currency)}
                         </span>
                       </td>
-                      <td>
-                        <div className="table-actions">
-                          {isHR && (
+                      {isHR && (
+                        <td>
+                          <div className="table-actions">
                             <button
                               onClick={() => handleDelete(slip)}
                               className="action-icon-btn btn-delete"
@@ -548,9 +557,9 @@ export default function Payroll() {
                             >
                               {busyId === slip.id ? <Loader2 size={15} /> : <Trash2 size={15} />}
                             </button>
-                          )}
-                        </div>
-                      </td>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })

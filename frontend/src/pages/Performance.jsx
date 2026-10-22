@@ -15,6 +15,7 @@ import {
   Award,
 } from 'lucide-react';
 import { performanceApi, employeeApi } from '../api';
+import { useAuth } from '../context/useAuth';
 import './Performance.css';
 
 const STATUS_OPTIONS = ['DRAFT', 'COMPLETED', 'ACKNOWLEDGED'];
@@ -34,6 +35,7 @@ const EMPTY_FORM = {
 };
 
 export default function Performance() {
+  const { isManager, isHR } = useAuth();
   const [reviews, setReviews] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -157,6 +159,7 @@ export default function Performance() {
 
   // --- Workflow actions ---------------------------------------------------
   const handleComplete = async (review) => {
+    if (!isManager) return;
     try {
       setBusyId(review.id);
       await performanceApi.complete(review.id);
@@ -193,6 +196,7 @@ export default function Performance() {
   };
 
   const handleDelete = async (review) => {
+    if (!isHR) return;
     const confirmed = window.confirm(
       `Delete the ${review.review_period} review for ${review.employee_name}?`
     );
@@ -214,6 +218,7 @@ export default function Performance() {
 
   // --- Create form ----------------------------------------------------------
   const handleOpenModal = () => {
+    if (!isManager) return;
     setForm(EMPTY_FORM);
     setFormError('');
     setIsModalOpen(true);
@@ -226,6 +231,10 @@ export default function Performance() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isManager) {
+      setFormError('Only managers and administrators can create performance reviews.');
+      return;
+    }
     if (!form.employee || !form.review_period.trim()) {
       setFormError('Employee and review period are required.');
       return;
@@ -313,10 +322,12 @@ export default function Performance() {
           <h1>Performance Reviews</h1>
           <p>Competency evaluations, rating analytics, and acknowledgement tracking.</p>
         </div>
-        <button onClick={handleOpenModal} className="btn btn-primary">
-          <Plus size={18} />
-          <span>New Review</span>
-        </button>
+        {isManager && (
+          <button onClick={handleOpenModal} className="btn btn-primary">
+            <Plus size={18} />
+            <span>New Review</span>
+          </button>
+        )}
       </div>
 
       {/* Analytics Cards */}
@@ -403,21 +414,23 @@ export default function Performance() {
             ))}
           </select>
 
-          <select
-            className="filter-select"
-            value={employeeFilter}
-            onChange={(e) => {
-              setEmployeeFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">All Employees</option>
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {emp.full_name} ({emp.employee_id})
-              </option>
-            ))}
-          </select>
+          {isManager && (
+            <select
+              className="filter-select"
+              value={employeeFilter}
+              onChange={(e) => {
+                setEmployeeFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All Employees</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.full_name} ({emp.employee_id})
+                </option>
+              ))}
+            </select>
+          )}
 
           <input
             className="filter-select"
@@ -510,7 +523,7 @@ export default function Performance() {
                         >
                           <Eye size={15} />
                         </button>
-                        {review.status === 'DRAFT' && (
+                        {review.status === 'DRAFT' && isManager && (
                           <button
                             onClick={() => handleComplete(review)}
                             className="action-icon-btn btn-approve"
@@ -530,14 +543,16 @@ export default function Performance() {
                             {busyId === review.id ? <Loader2 size={15} /> : <Check size={15} />}
                           </button>
                         )}
-                        <button
-                          onClick={() => handleDelete(review)}
-                          className="action-icon-btn btn-delete"
-                          disabled={busyId === review.id}
-                          title="Delete review"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        {isHR && (
+                          <button
+                            onClick={() => handleDelete(review)}
+                            className="action-icon-btn btn-delete"
+                            disabled={busyId === review.id}
+                            title="Delete review"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -635,7 +650,7 @@ export default function Performance() {
             </div>
 
             <div className="modal-footer">
-              {detailReview.status === 'DRAFT' && (
+              {detailReview.status === 'DRAFT' && isManager && (
                 <button
                   className="btn btn-primary"
                   onClick={() => handleComplete(detailReview)}

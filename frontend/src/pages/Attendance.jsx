@@ -30,7 +30,7 @@ const statusBadge = (status) => {
 };
 
 export default function Attendance() {
-  const { user, employeeId } = useAuth();
+  const { isManager, employeeId } = useAuth();
   // View toggle: 'records' = daily log, 'summary' = per-employee month counts
   const [view, setView] = useState('records');
 
@@ -196,6 +196,7 @@ export default function Attendance() {
 
   // Actions
   const handleCheckIn = async (record) => {
+    if (!isManager && record.employee !== employeeId) return;
     try {
       setBusyId(record.id);
       await attendanceApi.checkIn(record.id);
@@ -210,6 +211,7 @@ export default function Attendance() {
   };
 
   const handleCheckOut = async (record) => {
+    if (!isManager && record.employee !== employeeId) return;
     try {
       setBusyId(record.id);
       await attendanceApi.checkOut(record.id);
@@ -428,21 +430,23 @@ export default function Attendance() {
           {/* Filter Bar */}
           <div className="filter-bar">
             <div className="filter-row">
-              <select
-                className="filter-select"
-                value={employeeFilter}
-                onChange={(e) => {
-                  setEmployeeFilter(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">All Employees</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.full_name} ({emp.employee_id})
-                  </option>
-                ))}
-              </select>
+              {isManager && (
+                <select
+                  className="filter-select"
+                  value={employeeFilter}
+                  onChange={(e) => {
+                    setEmployeeFilter(e.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">All Employees</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.full_name} ({emp.employee_id})
+                    </option>
+                  ))}
+                </select>
+              )}
 
               <select
                 className="filter-select"
@@ -587,32 +591,38 @@ export default function Attendance() {
                         </td>
                         <td>
                           <div className="action-buttons">
-                            {!record.check_in && (
-                              <button
-                                className="action-icon-btn btn-approve"
-                                onClick={() => handleCheckIn(record)}
-                                disabled={busyId === record.id}
-                                title="Record check-in"
-                              >
-                                {busyId === record.id
-                                  ? <Loader2 size={14} className="spin" />
-                                  : <LogIn size={14} />}
-                              </button>
-                            )}
-                            {record.check_in && !record.check_out && (
-                              <button
-                                className="action-icon-btn btn-delete"
-                                onClick={() => handleCheckOut(record)}
-                                disabled={busyId === record.id}
-                                title="Record check-out"
-                              >
-                                {busyId === record.id
-                                  ? <Loader2 size={14} className="spin" />
-                                  : <LogOut size={14} />}
-                              </button>
-                            )}
-                            {record.check_in && record.check_out && (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Done</span>
+                            {(isManager || record.employee === employeeId) ? (
+                              <>
+                                {!record.check_in && (
+                                  <button
+                                    className="action-icon-btn btn-approve"
+                                    onClick={() => handleCheckIn(record)}
+                                    disabled={busyId === record.id}
+                                    title="Record check-in"
+                                  >
+                                    {busyId === record.id
+                                      ? <Loader2 size={14} className="spin" />
+                                      : <LogIn size={14} />}
+                                  </button>
+                                )}
+                                {record.check_in && !record.check_out && (
+                                  <button
+                                    className="action-icon-btn btn-delete"
+                                    onClick={() => handleCheckOut(record)}
+                                    disabled={busyId === record.id}
+                                    title="Record check-out"
+                                  >
+                                    {busyId === record.id
+                                      ? <Loader2 size={14} className="spin" />
+                                      : <LogOut size={14} />}
+                                  </button>
+                                )}
+                                {record.check_in && record.check_out && (
+                                  <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Done</span>
+                                )}
+                              </>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>
                             )}
                           </div>
                         </td>

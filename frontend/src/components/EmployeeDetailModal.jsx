@@ -11,13 +11,13 @@ import {
   Building2,
   BadgeCheck,
   History,
-  TrendingUp,
   FileText,
   Upload,
   Trash2,
   ExternalLink,
 } from 'lucide-react';
 import { historyApi, documentApi } from '../api';
+import { useAuth } from '../context/useAuth';
 import './EmployeeDetailModal.css';
 
 const STATUS_LABELS = {
@@ -42,6 +42,7 @@ function InfoRow({ icon, label, value }) {
 }
 
 export default function EmployeeDetailModal({ employee, onClose }) {
+  const { isHR } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const [historyEvents, setHistoryEvents] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -101,6 +102,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
 
   const handleUploadDocument = async (e) => {
     e.preventDefault();
+    if (!isHR) return;
     if (!uploadDocTitle.trim() || !uploadFile) {
       setDocError('Document title and file are required.');
       return;
@@ -126,6 +128,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
   };
 
   const handleDeleteDocument = async (docId) => {
+    if (!isHR) return;
     if (!window.confirm('Delete this document?')) return;
     try {
       await documentApi.delete(docId);
@@ -310,62 +313,64 @@ export default function EmployeeDetailModal({ employee, onClose }) {
           ) : (
             <div style={{ padding: '8px 0' }}>
               {/* Document upload form */}
-              <form onSubmit={handleUploadDocument} className="upload-box">
-                <span style={{ fontSize: '0.85rem', fontWeight: '700', marginBottom: '8px', display: 'block' }}>
-                  Upload New Document
-                </span>
-                {docError && (
-                  <div className="alert-error" style={{ marginBottom: '10px', padding: '8px 12px', fontSize: '0.82rem' }}>
-                    {docError}
-                  </div>
-                )}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr)) auto', gap: '8px', alignItems: 'end' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.74rem' }}>Title</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      style={{ padding: '6px 10px', fontSize: '0.84rem' }}
-                      placeholder="e.g. Contract"
-                      value={uploadDocTitle}
-                      onChange={(e) => setUploadDocTitle(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.74rem' }}>Type</label>
-                    <select
-                      className="form-select"
-                      style={{ padding: '6px 10px', fontSize: '0.84rem' }}
-                      value={uploadDocType}
-                      onChange={(e) => setUploadDocType(e.target.value)}
+              {isHR && (
+                <form onSubmit={handleUploadDocument} className="upload-box">
+                  <span style={{ fontSize: '0.85rem', fontWeight: '700', marginBottom: '8px', display: 'block' }}>
+                    Upload New Document
+                  </span>
+                  {docError && (
+                    <div className="alert-error" style={{ marginBottom: '10px', padding: '8px 12px', fontSize: '0.82rem' }}>
+                      {docError}
+                    </div>
+                  )}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr)) auto', gap: '8px', alignItems: 'end' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.74rem' }}>Title</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        style={{ padding: '6px 10px', fontSize: '0.84rem' }}
+                        placeholder="e.g. Contract"
+                        value={uploadDocTitle}
+                        onChange={(e) => setUploadDocTitle(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.74rem' }}>Type</label>
+                      <select
+                        className="form-select"
+                        style={{ padding: '6px 10px', fontSize: '0.84rem' }}
+                        value={uploadDocType}
+                        onChange={(e) => setUploadDocType(e.target.value)}
+                      >
+                        <option value="CONTRACT">Contract</option>
+                        <option value="ID">ID Document</option>
+                        <option value="CERTIFICATE">Certificate</option>
+                        <option value="EVALUATION">Evaluation</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.74rem' }}>File</label>
+                      <input
+                        type="file"
+                        className="form-input"
+                        style={{ padding: '4px 6px', fontSize: '0.8rem' }}
+                        onChange={(e) => setUploadFile(e.target.files[0] || null)}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-sm"
+                      disabled={uploading}
+                      style={{ height: '36px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                     >
-                      <option value="CONTRACT">Contract</option>
-                      <option value="ID">ID Document</option>
-                      <option value="CERTIFICATE">Certificate</option>
-                      <option value="EVALUATION">Evaluation</option>
-                      <option value="OTHER">Other</option>
-                    </select>
+                      <Upload size={14} />
+                      <span>{uploading ? '...' : 'Upload'}</span>
+                    </button>
                   </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.74rem' }}>File</label>
-                    <input
-                      type="file"
-                      className="form-input"
-                      style={{ padding: '4px 6px', fontSize: '0.8rem' }}
-                      onChange={(e) => setUploadFile(e.target.files[0] || null)}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="btn btn-primary btn-sm"
-                    disabled={uploading}
-                    style={{ height: '36px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <Upload size={14} />
-                    <span>{uploading ? '...' : 'Upload'}</span>
-                  </button>
-                </div>
-              </form>
+                </form>
+              )}
 
               {/* Documents List */}
               {loadingDocs ? (
@@ -407,14 +412,16 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                             <span>View</span>
                           </a>
                         )}
-                        <button
-                          type="button"
-                          className="action-icon-btn btn-delete"
-                          onClick={() => handleDeleteDocument(doc.id)}
-                          title="Delete document"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {isHR && (
+                          <button
+                            type="button"
+                            className="action-icon-btn btn-delete"
+                            onClick={() => handleDeleteDocument(doc.id)}
+                            title="Delete document"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}

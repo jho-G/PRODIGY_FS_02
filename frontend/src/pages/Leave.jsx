@@ -35,9 +35,20 @@ const EMPTY_FORM = {
 };
 
 export default function Leave() {
-  const { isManager, isHR, employeeId } = useAuth();
+  const { isManager, isHR, employeeId, user } = useAuth();
   const [leaves, setLeaves] = useState([]);
   const [employees, setEmployees] = useState([]);
+
+  const resolveCurrentEmployeeId = useCallback(() => {
+    if (employeeId) return String(employeeId);
+    if (user?.employee_id) return String(user.employee_id);
+    const matched = employees.find(
+      (emp) =>
+        (user?.email && emp.email?.toLowerCase() === user.email.toLowerCase()) ||
+        (user?.username && emp.email?.toLowerCase().startsWith(user.username.toLowerCase()))
+    );
+    return matched ? String(matched.id) : '';
+  }, [employeeId, user, employees]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -170,9 +181,10 @@ export default function Leave() {
 
   // --- Request form -----------------------------------------------------
   const handleOpenModal = () => {
+    const autoEmpId = !isManager ? resolveCurrentEmployeeId() : '';
     setForm({
       ...EMPTY_FORM,
-      employee: !isManager && employeeId ? String(employeeId) : '',
+      employee: autoEmpId,
     });
     setFormError('');
     setIsModalOpen(true);
@@ -185,18 +197,22 @@ export default function Leave() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.employee || !form.start_date || !form.end_date) {
+    const payload = { ...form };
+    if (!isManager && !payload.employee) {
+      payload.employee = resolveCurrentEmployeeId();
+    }
+    if (!payload.employee || !payload.start_date || !payload.end_date) {
       setFormError('Employee and both dates are required.');
       return;
     }
-    if (form.end_date < form.start_date) {
+    if (payload.end_date < payload.start_date) {
       setFormError('End date cannot be before the start date.');
       return;
     }
     try {
       setSubmitting(true);
       setFormError('');
-      await leaveApi.create(form);
+      await leaveApi.create(payload);
       setIsModalOpen(false);
       showToast('Leave request submitted.');
       setPage(1);
@@ -297,21 +313,23 @@ export default function Leave() {
             ))}
           </select>
 
-          <select
-            className="filter-select"
-            value={employeeFilter}
-            onChange={(e) => {
-              setEmployeeFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">All Employees</option>
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {emp.full_name} ({emp.employee_id})
-              </option>
-            ))}
-          </select>
+          {isManager && (
+            <select
+              className="filter-select"
+              value={employeeFilter}
+              onChange={(e) => {
+                setEmployeeFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All Employees</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.full_name} ({emp.employee_id})
+                </option>
+              ))}
+            </select>
+          )}
 
           {(statusFilter || typeFilter || employeeFilter) && (
             <button onClick={resetFilters} className="btn btn-secondary btn-sm">
@@ -498,27 +516,49 @@ export default function Leave() {
                   </div>
                 )}
 
-                <div className="form-group">
-                  <label className="form-label" htmlFor="leave-employee">
-                    Employee *
-                  </label>
-                  <select
-                    id="leave-employee"
-                    className="form-select"
-                    name="employee"
-                    value={form.employee}
-                    onChange={handleFormChange}
-                    disabled={!isManager}
-                    required
-                  >
-                    <option value="">Select an employee...</option>
-                    {employees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.full_name} ({emp.employee_id})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {!isManager ? (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="leave-employee-locked">
+                      Employee
+                    </label>
+                    <input
+                      id="leave-employee-locked"
+                      type="text"
+                      className="form-input"
+                      value={
+                        employees.find((emp) => String(emp.id) === String(form.employee || resolveCurrentEmployeeId()))?.full_name ||
+                        (user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : 'My Profile')
+                      }
+                      disabled
+                      readOnly
+                    />
+                    <input type="hidden" name="employee" value={form.employee || resolveCurrentEmployeeId()} />
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                      Leave requests are automatically linked to your employee profile.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="leave-employee">
+                      Employee *
+                    </label>
+                    <select
+                      id="leave-employee"
+                      className="form-select"
+                      name="employee"
+                      value={form.employee}
+                      onChange={handleFormChange}
+                      required
+                    >
+                      <option value="">Select an employee...</option>
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.full_name} ({emp.employee_id})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div className="form-group">
                   <label className="form-label" htmlFor="leave-type">
