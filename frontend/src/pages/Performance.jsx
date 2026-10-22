@@ -15,6 +15,7 @@ import {
   Award,
 } from 'lucide-react';
 import { performanceApi, employeeApi } from '../api';
+import { useAuth } from '../context/useAuth';
 import './Performance.css';
 
 const STATUS_OPTIONS = ['DRAFT', 'COMPLETED', 'ACKNOWLEDGED'];
@@ -34,6 +35,7 @@ const EMPTY_FORM = {
 };
 
 export default function Performance() {
+  const { isManager, isHR } = useAuth();
   const [reviews, setReviews] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -214,6 +216,7 @@ export default function Performance() {
 
   // --- Create form ----------------------------------------------------------
   const handleOpenModal = () => {
+    if (!isManager) return;
     setForm(EMPTY_FORM);
     setFormError('');
     setIsModalOpen(true);
@@ -226,6 +229,10 @@ export default function Performance() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isManager) {
+      setFormError('Only managers and administrators can create performance reviews.');
+      return;
+    }
     if (!form.employee || !form.review_period.trim()) {
       setFormError('Employee and review period are required.');
       return;
@@ -313,10 +320,12 @@ export default function Performance() {
           <h1>Performance Reviews</h1>
           <p>Competency evaluations, rating analytics, and acknowledgement tracking.</p>
         </div>
-        <button onClick={handleOpenModal} className="btn btn-primary">
-          <Plus size={18} />
-          <span>New Review</span>
-        </button>
+        {isManager && (
+          <button onClick={handleOpenModal} className="btn btn-primary">
+            <Plus size={18} />
+            <span>New Review</span>
+          </button>
+        )}
       </div>
 
       {/* Analytics Cards */}
