@@ -163,6 +163,7 @@ export default function Payroll() {
 
   // --- Actions -----------------------------------------------------------
   const handleGenerate = async () => {
+    if (!isHR) return;
     const [year, month] = summaryMonthParts;
     const confirmed = window.confirm(
       `Generate payslips for all active employees for ${MONTHS[month - 1]} ${year}? Existing payslips for that period will be recalculated.`
