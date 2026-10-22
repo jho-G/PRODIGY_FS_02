@@ -44,3 +44,4 @@ venv.bak/
 .coverage.*
 coverage.xml
 htmlcov/
+docker-compose

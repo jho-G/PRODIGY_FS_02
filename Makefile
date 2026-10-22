@@ -88,17 +88,19 @@ check-deploy:
 # ------------------------------------
 # Docker
 # ------------------------------------
+COMPOSE ?= $(shell command -v docker-compose 2>/dev/null || (command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && echo "docker compose") || echo "./docker-compose")
+
 docker-build:
-	docker compose build
+	$(COMPOSE) build
 
 docker-up:
-	docker compose up -d
+	$(COMPOSE) up -d
 
 docker-down:
-	docker compose down
+	$(COMPOSE) down
 
 docker-logs:
-	docker compose logs -f
+	$(COMPOSE) logs -f
 
 # ------------------------------------
 # Utilities
