@@ -475,20 +475,20 @@ export default function Payroll() {
                 <th>Bonus</th>
                 <th>Deductions</th>
                 <th>Net Pay</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                {isHR && <th style={{ textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="8" style={{ textAlign: 'center', padding: '36px' }}>
+                  <td colSpan={isHR ? 8 : 7} style={{ textAlign: 'center', padding: '36px' }}>
                     <div className="spinner-primary" style={{ margin: '0 auto 12px' }} />
                     <p>Loading payslips...</p>
                   </td>
                 </tr>
               ) : visiblePayslips.length === 0 ? (
                 <tr>
-                  <td colSpan="8">
+                  <td colSpan={isHR ? 8 : 7}>
                     <div className="empty-table-state">
                       <Banknote size={40} style={{ opacity: 0.4 }} />
                       <p>No payslips match the current filters.</p>
@@ -544,9 +544,9 @@ export default function Payroll() {
                           {formatMoney(slip.net_pay, slip.currency)}
                         </span>
                       </td>
-                      <td>
-                        <div className="table-actions">
-                          {isHR && (
+                      {isHR && (
+                        <td>
+                          <div className="table-actions">
                             <button
                               onClick={() => handleDelete(slip)}
                               className="action-icon-btn btn-delete"
@@ -555,9 +555,9 @@ export default function Payroll() {
                             >
                               {busyId === slip.id ? <Loader2 size={15} /> : <Trash2 size={15} />}
                             </button>
-                          )}
-                        </div>
-                      </td>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })
