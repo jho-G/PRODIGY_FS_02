@@ -11,7 +11,6 @@ import {
   Building2,
   BadgeCheck,
   History,
-  TrendingUp,
   FileText,
   Upload,
   Trash2,
@@ -129,6 +128,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
   };
 
   const handleDeleteDocument = async (docId) => {
+    if (!isHR) return;
     if (!window.confirm('Delete this document?')) return;
     try {
       await documentApi.delete(docId);
@@ -412,14 +412,16 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                             <span>View</span>
                           </a>
                         )}
-                        <button
-                          type="button"
-                          className="action-icon-btn btn-delete"
-                          onClick={() => handleDeleteDocument(doc.id)}
-                          title="Delete document"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {isHR && (
+                          <button
+                            type="button"
+                            className="action-icon-btn btn-delete"
+                            onClick={() => handleDeleteDocument(doc.id)}
+                            title="Delete document"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
