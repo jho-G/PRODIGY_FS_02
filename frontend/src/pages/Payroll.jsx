@@ -211,6 +211,7 @@ export default function Payroll() {
 
   // --- Create form -------------------------------------------------------
   const handleOpenModal = () => {
+    if (!isHR) return;
     setForm(EMPTY_FORM);
     setFormError('');
     setIsModalOpen(true);
@@ -232,6 +233,10 @@ export default function Payroll() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isHR) {
+      setFormError('You do not have permission to create payslips.');
+      return;
+    }
     if (!form.employee || !form.basic_salary) {
       setFormError('Employee and basic salary are required.');
       return;
