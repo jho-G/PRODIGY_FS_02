@@ -194,6 +194,7 @@ export default function Employees() {
 
   // Actions
   const handleOpenAddModal = () => {
+    if (!isHR) return;
     setEditingEmployee(null);
     setIsModalOpen(true);
   };
