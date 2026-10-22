@@ -200,6 +200,7 @@ export default function Employees() {
   };
 
   const handleOpenEditModal = (employee) => {
+    if (!isHR) return;
     setEditingEmployee(employee);
     setIsModalOpen(true);
   };
