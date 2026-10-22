@@ -1,5 +1,26 @@
 services:
   # ============================================================
+  # PostgreSQL Database Service (Production)
+  # ============================================================
+  db:
+    image: postgres:16-alpine
+    container_name: ems_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ems_db}
+      POSTGRES_USER: ${POSTGRES_USER:-ems_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ems_secure_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ems_user} -d ${POSTGRES_DB:-ems_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ems_network
+
+  # ============================================================
   # Django REST Framework Backend Service
   # ============================================================
   backend:
@@ -11,8 +32,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Persist SQLite database file between container restarts
-      # In production, replace with a PostgreSQL service volume
+      # Persist SQLite fallback database file between container restarts
       - ./db.sqlite3:/app/db.sqlite3
       # Persist user-uploaded documents
       - ./media:/app/media
@@ -55,6 +75,11 @@ services:
     networks:
       - ems_network
 
+volumes:
+  postgres_data:
+    driver: local
+
 networks:
   ems_network:
     driver: bridge
+

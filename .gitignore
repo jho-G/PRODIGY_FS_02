@@ -38,3 +38,9 @@ venv.bak/
 *.crt
 *.csr
 *.pfx
+
+# Test & coverage artifacts
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/

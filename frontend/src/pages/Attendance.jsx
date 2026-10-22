@@ -13,6 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { attendanceApi, employeeApi } from '../api';
+import { useAuth } from '../context/useAuth';
 import './Attendance.css';
 
 const STATUS_OPTIONS = ['PRESENT', 'LATE', 'ABSENT', 'LEAVE', 'REMOTE'];
@@ -29,10 +30,12 @@ const statusBadge = (status) => {
 };
 
 export default function Attendance() {
+  const { user, employeeId } = useAuth();
   // View toggle: 'records' = daily log, 'summary' = per-employee month counts
   const [view, setView] = useState('records');
 
   const [records, setRecords] = useState([]);
+  const [todayRecord, setTodayRecord] = useState(null);
   const [summary, setSummary] = useState([]);
   const [summaryMeta, setSummaryMeta] = useState({ year: null, month: null });
   const [employees, setEmployees] = useState([]);
@@ -59,6 +62,27 @@ export default function Attendance() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
+
+  const fetchTodayRecord = useCallback(async () => {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const params = { date: todayStr };
+      if (employeeId) params.employee = employeeId;
+      const data = await attendanceApi.getAll(params);
+      const results = data.results || (Array.isArray(data) ? data : []);
+      if (results.length > 0) {
+        setTodayRecord(results[0]);
+      } else {
+        setTodayRecord(null);
+      }
+    } catch (err) {
+      console.warn('Could not fetch today attendance record:', err);
+    }
+  }, [employeeId]);
+
+  useEffect(() => {
+    fetchTodayRecord();
+  }, [fetchTodayRecord]);
 
   // Debounce employee-name search
   useEffect(() => {
@@ -199,6 +223,26 @@ export default function Attendance() {
     }
   };
 
+  const [punching, setPunching] = useState(false);
+
+  const handleQuickPunch = async () => {
+    try {
+      setPunching(true);
+      const res = await attendanceApi.punch();
+      if (res.check_out) {
+        showToast(`Clock-out recorded at ${formatTime(res.check_out)}.`);
+      } else {
+        showToast(`Clock-in recorded at ${formatTime(res.check_in)}.`);
+      }
+      fetchRecords();
+    } catch (err) {
+      console.error('Punch failed:', err);
+      showToast(err.response?.data?.detail || 'Punch failed.', 'error');
+    } finally {
+      setPunching(false);
+    }
+  };
+
   const resetFilters = () => {
     setSearch('');
     setEmployeeFilter('');
@@ -279,21 +323,103 @@ export default function Attendance() {
           <h1>Attendance</h1>
           <p>Daily check-in/out logs and monthly attendance summaries.</p>
         </div>
-        <div className="view-toggle">
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            className={`btn btn-sm ${view === 'records' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setView('records')}
+            onClick={handleQuickPunch}
+            className="btn btn-primary"
+            disabled={punching}
+            title="Clock In or Clock Out for Today"
           >
-            <CalendarCheck size={16} />
-            <span>Daily Log</span>
+            {punching ? (
+              <Loader2 size={16} className="spin" />
+            ) : (
+              <Clock size={16} />
+            )}
+            <span>{punching ? 'Recording...' : 'Clock In / Out Today'}</span>
           </button>
-          <button
-            className={`btn btn-sm ${view === 'summary' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setView('summary')}
-          >
-            <Clock size={16} />
-            <span>Monthly Summary</span>
-          </button>
+          <div className="view-toggle">
+            <button
+              className={`btn btn-sm ${view === 'records' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setView('records')}
+            >
+              <CalendarCheck size={16} />
+              <span>Daily Log</span>
+            </button>
+            <button
+              className={`btn btn-sm ${view === 'summary' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setView('summary')}
+            >
+              <Clock size={16} />
+              <span>Monthly Summary</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Today Attendance Punch Card */}
+      <div className="attendance-today-card">
+        <div className="today-card-left">
+          <div className="today-icon-wrapper">
+            <Clock size={24} className="today-clock-icon" />
+          </div>
+          <div className="today-info">
+            <div className="today-title">
+              Today's Attendance ({new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })})
+            </div>
+            <div className="today-status-row">
+              {!todayRecord || !todayRecord.check_in ? (
+                <>
+                  <span className="today-status-badge status-not-started">Not clocked in today</span>
+                  <span className="today-cutoff-note">• Check-ins after 09:00 AM auto-flag as Late</span>
+                </>
+              ) : !todayRecord.check_out ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="today-status-badge status-active">
+                    Clocked In: {formatTime(todayRecord.check_in)}
+                  </span>
+                  {statusBadge(todayRecord.status)}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="today-status-badge status-complete">
+                    Shift Done ({formatTime(todayRecord.check_in)} - {formatTime(todayRecord.check_out)})
+                  </span>
+                  {statusBadge(todayRecord.status)}
+                  {todayRecord.work_hours != null && (
+                    <span className="badge badge-info">{todayRecord.work_hours}h</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="today-card-actions">
+          {!todayRecord || !todayRecord.check_in ? (
+            <button
+              onClick={handleQuickPunch}
+              className="btn btn-primary"
+              disabled={punching}
+              title="Record Clock-In for Today"
+            >
+              {punching ? <Loader2 size={16} className="spin" /> : <LogIn size={16} />}
+              <span>{punching ? 'Recording...' : 'Clock In for Today'}</span>
+            </button>
+          ) : !todayRecord.check_out ? (
+            <button
+              onClick={handleQuickPunch}
+              className="btn btn-secondary"
+              disabled={punching}
+              title="Record Clock-Out for Today"
+            >
+              {punching ? <Loader2 size={16} className="spin" /> : <LogOut size={16} />}
+              <span>{punching ? 'Recording...' : 'Clock Out for Today'}</span>
+            </button>
+          ) : (
+            <div className="today-shift-done">
+              <CheckCircle size={18} style={{ color: 'var(--success)' }} />
+              <span>Shift Recorded</span>
+            </div>
+          )}
         </div>
       </div>
 

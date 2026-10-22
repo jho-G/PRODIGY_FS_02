@@ -201,9 +201,20 @@ export function AuthProvider({ children }) {
     }
   }, [clearSession]);
 
+  const role = user?.role || 'EMPLOYEE';
+  const isAdmin = role === 'ADMIN';
+  const isHR = role === 'HR' || isAdmin;
+  const isManager = role === 'MANAGER' || isHR;
+  const employeeId = user?.employee_id || null;
+
   const value = {
     accessToken,
     user,
+    role,
+    isAdmin,
+    isHR,
+    isManager,
+    employeeId,
     isAuthenticated: Boolean(accessToken) && !isTokenExpiredOrExpiring(accessToken || ''),
     loading,
     login,

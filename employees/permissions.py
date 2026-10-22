@@ -90,3 +90,16 @@ class IsHROrAdmin(permissions.BasePermission):
             and request.user.is_authenticated
             and is_hr_or_above(request.user)
         )
+
+
+class IsAuthenticatedReadOnlyOrHROrAdmin(permissions.BasePermission):
+    """
+    Authenticated users can read; writes and deletions require HR or Admin.
+    """
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return is_hr_or_above(request.user)

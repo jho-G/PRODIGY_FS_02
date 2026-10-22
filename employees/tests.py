@@ -21,6 +21,7 @@ Tests are organized by concern:
 """
 
 from datetime import date, time, timedelta
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from rest_framework import status
@@ -30,6 +31,7 @@ from .models import (
     AttendanceRecord,
     Department,
     Employee,
+    EmployeeDocument,
     EmploymentEvent,
     Holiday,
     LeaveRequest,
@@ -38,7 +40,6 @@ from .models import (
     PerformanceReview,
     UserProfile,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -388,7 +389,7 @@ class LeaveWorkflowTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_leave_type_sick_does_not_affect_vacation_balance(self):
-        sick_leave = LeaveRequest.objects.create(
+        LeaveRequest.objects.create(
             employee=self.employee,
             leave_type="SL",
             start_date=_days_ago(-1),
@@ -613,6 +614,9 @@ class PerformanceReviewTests(APITestCase):
             position="UI/UX Designer",
             salary=84000,
         )
+        self.emp_user = _user_with_role(
+            "kalkidan_rev", "EMPLOYEE", employee=self.employee
+        )
         self.review = PerformanceReview.objects.create(
             employee=self.employee,
             review_period="2026-Q3",
@@ -636,6 +640,14 @@ class PerformanceReviewTests(APITestCase):
         self.assertEqual(self.review.status, "COMPLETED")
         self.assertEqual(self.review.reviewer, self.user)
 
+        # Manager cannot acknowledge someone else's review
+        mgr_ack = self.client.post(
+            f"/api/performance-reviews/{self.review.id}/acknowledge/"
+        )
+        self.assertEqual(mgr_ack.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Evaluated employee acknowledges their own review
+        self.client.force_authenticate(user=self.emp_user)
         response = self.client.post(
             f"/api/performance-reviews/{self.review.id}/acknowledge/"
         )
@@ -644,6 +656,7 @@ class PerformanceReviewTests(APITestCase):
         self.assertEqual(self.review.status, "ACKNOWLEDGED")
 
     def test_cannot_acknowledge_draft(self):
+        self.client.force_authenticate(user=self.emp_user)
         response = self.client.post(
             f"/api/performance-reviews/{self.review.id}/acknowledge/"
         )
@@ -888,6 +901,29 @@ class RolePermissionTests(APITestCase):
         }
         response = self.client.post("/api/employees/", payload)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_employee_cannot_see_other_employee_salary_and_bank(self):
+        self.client.force_authenticate(user=self.employee)
+        response = self.client.get(f"/api/employees/{self.manager_employee.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["salary"])
+        self.assertIsNone(response.data["monthly_salary"])
+        self.assertIsNone(response.data["salary_monthly"])
+        self.assertEqual(response.data["bank_account"], "")
+
+    def test_employee_can_see_own_salary_and_bank(self):
+        self.client.force_authenticate(user=self.employee)
+        response = self.client.get(f"/api/employees/{self.staff_employee.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(response.data["salary"])
+        self.assertEqual(float(response.data["salary"]), 50000.0)
+
+    def test_hr_can_see_all_employee_salaries(self):
+        hr = _user_with_role("hr_inspector", "HR")
+        self.client.force_authenticate(user=hr)
+        response = self.client.get(f"/api/employees/{self.staff_employee.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(float(response.data["salary"]), 50000.0)
 
 
 # ---------------------------------------------------------------------------
@@ -1224,9 +1260,7 @@ class SecurityTests(APITestCase):
 
         # Try using the blacklisted refresh token
         self.client.force_authenticate(user=None)
-        response = self.client.post(
-            "/api/auth/token/refresh/", {"refresh": refresh}
-        )
+        response = self.client.post("/api/auth/token/refresh/", {"refresh": refresh})
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_logout_requires_refresh_token(self):
@@ -1449,7 +1483,6 @@ class IntegrationTests(APITestCase):
         get_again = self.client.get(f"/api/employees/{emp_id}/")
         self.assertEqual(get_again.status_code, status.HTTP_200_OK)
 
-
     def test_leave_approval_deducts_balance(self):
         """Submit leave → approve → verify remaining balance."""
         emp = _make_employee(
@@ -1497,9 +1530,7 @@ class IntegrationTests(APITestCase):
         )
         self.assertEqual(gen_resp.status_code, status.HTTP_200_OK)
 
-        payslip = Payslip.objects.get(
-            employee=emp, period_year=2025, period_month=12
-        )
+        payslip = Payslip.objects.get(employee=emp, period_year=2025, period_month=12)
         self.assertEqual(payslip.basic_salary, expected_monthly)
 
 
@@ -1554,3 +1585,576 @@ class DeploymentConfigTests(APITestCase):
 
         self.assertEqual(settings.DATA_UPLOAD_MAX_MEMORY_SIZE, 15 * 1024 * 1024)
         self.assertEqual(settings.FILE_UPLOAD_MAX_MEMORY_SIZE, 15 * 1024 * 1024)
+
+
+# ---------------------------------------------------------------------------
+# Employee Document Permission Tests
+# ---------------------------------------------------------------------------
+
+
+class EmployeeDocumentPermissionTests(APITestCase):
+    def setUp(self):
+        self.hr_user = _user_with_role("hr_doc_officer", "HR")
+        self.emp1 = Employee.objects.create(
+            first_name="Dawit",
+            last_name="Tadesse",
+            email="dawit.tadesse@example.com",
+            date_of_birth=date(1992, 3, 10),
+            gender="M",
+            address="Addis Ababa",
+            employee_id="EMP-9701",
+            position="Engineer",
+            salary=60000,
+        )
+        self.user1 = _user_with_role("user_emp1", "EMPLOYEE", employee=self.emp1)
+
+        self.emp2 = Employee.objects.create(
+            first_name="Hellen",
+            last_name="Mulugeta",
+            email="hellen.mulugeta@example.com",
+            date_of_birth=date(1993, 7, 20),
+            gender="F",
+            address="Addis Ababa",
+            employee_id="EMP-9702",
+            position="Designer",
+            salary=65000,
+        )
+        self.user2 = _user_with_role("user_emp2", "EMPLOYEE", employee=self.emp2)
+
+        self.doc1 = EmployeeDocument.objects.create(
+            employee=self.emp1,
+            document_type="CONTRACT",
+            title="Employment Contract Dawit",
+            uploaded_by=self.hr_user,
+        )
+        self.doc2 = EmployeeDocument.objects.create(
+            employee=self.emp2,
+            document_type="ID",
+            title="Passport Copy Hellen",
+            uploaded_by=self.hr_user,
+        )
+
+    def test_employee_can_only_see_own_documents(self):
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get("/api/documents/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = [d["id"] for d in response.data.get("results", response.data)]
+        self.assertIn(self.doc1.id, ids)
+        self.assertNotIn(self.doc2.id, ids)
+
+    def test_employee_cannot_delete_other_employee_document(self):
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.delete(f"/api/documents/{self.doc2.id}/")
+        # Should be 404 (because not in queryset) or 403
+        self.assertIn(
+            response.status_code, [status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN]
+        )
+        self.assertTrue(EmployeeDocument.objects.filter(id=self.doc2.id).exists())
+
+    def test_hr_can_see_and_delete_any_document(self):
+        self.client.force_authenticate(user=self.hr_user)
+        response = self.client.get("/api/documents/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = [d["id"] for d in response.data.get("results", response.data)]
+        self.assertIn(self.doc1.id, ids)
+        self.assertIn(self.doc2.id, ids)
+
+        delete_resp = self.client.delete(f"/api/documents/{self.doc1.id}/")
+        self.assertEqual(delete_resp.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(EmployeeDocument.objects.filter(id=self.doc1.id).exists())
+
+
+class PayslipPermissionTests(APITestCase):
+    def setUp(self):
+        self.hr_user = _user_with_role("hr_payroll", "HR")
+        self.emp = Employee.objects.create(
+            first_name="Abebe",
+            last_name="Bikila",
+            email="abebe.b@example.com",
+            date_of_birth=date(1990, 1, 1),
+            gender="M",
+            address="Addis Ababa",
+            employee_id="EMP-9901",
+            position="Runner",
+            salary=70000,
+        )
+        self.emp_user = _user_with_role("emp_user_pay", "EMPLOYEE", employee=self.emp)
+        self.payslip = Payslip.objects.create(
+            employee=self.emp,
+            period_year=2026,
+            period_month=7,
+            basic_salary=5000,
+        )
+
+    def test_employee_cannot_generate_payroll(self):
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.post(
+            "/api/payslips/generate/", {"year": 2026, "month": 7}
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_employee_cannot_create_payslip(self):
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.post(
+            "/api/payslips/",
+            {
+                "employee": self.emp.id,
+                "period_year": 2026,
+                "period_month": 9,
+                "basic_salary": 99999,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_employee_cannot_access_payroll_summary(self):
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.get("/api/payslips/summary/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class HolidayPermissionTests(APITestCase):
+    def setUp(self):
+        self.manager_user = _user_with_role("manager_hol", "MANAGER")
+        self.hr_user = _user_with_role("hr_hol", "HR")
+        self.holiday = Holiday.objects.create(
+            name="New Year",
+            date=date(2027, 1, 1),
+        )
+
+    def test_manager_cannot_create_or_modify_holiday(self):
+        self.client.force_authenticate(user=self.manager_user)
+        response = self.client.post(
+            "/api/holidays/",
+            {"name": "Manager Day", "date": "2027-02-01"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        delete_resp = self.client.delete(f"/api/holidays/{self.holiday.id}/")
+        self.assertEqual(delete_resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_hr_can_create_holiday(self):
+        self.client.force_authenticate(user=self.hr_user)
+        response = self.client.post(
+            "/api/holidays/",
+            {"name": "HR Day", "date": "2027-05-01"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+
+class PerformanceReviewPermissionTests(APITestCase):
+    def setUp(self):
+        self.manager = _user_with_role("mgr_rev", "MANAGER")
+        self.emp1 = Employee.objects.create(
+            first_name="Almaz",
+            last_name="Ayana",
+            email="almaz.a@example.com",
+            date_of_birth=date(1992, 3, 5),
+            gender="F",
+            address="Addis Ababa",
+            employee_id="EMP-9902",
+            position="Engineer",
+            salary=80000,
+        )
+        self.emp1_user = _user_with_role("emp1_rev", "EMPLOYEE", employee=self.emp1)
+
+        self.emp2 = Employee.objects.create(
+            first_name="Derartu",
+            last_name="Tulu",
+            email="derartu.t@example.com",
+            date_of_birth=date(1989, 4, 15),
+            gender="F",
+            address="Addis Ababa",
+            employee_id="EMP-9903",
+            position="Manager",
+            salary=85000,
+        )
+        self.emp2_user = _user_with_role("emp2_rev", "EMPLOYEE", employee=self.emp2)
+
+        self.review1 = PerformanceReview.objects.create(
+            employee=self.emp1,
+            review_period="2026-Q1",
+            productivity=5,
+            quality=5,
+            teamwork=5,
+            communication=5,
+            leadership=5,
+            status="DRAFT",
+        )
+
+    def test_employee_cannot_complete_review(self):
+        self.client.force_authenticate(user=self.emp1_user)
+        response = self.client.post(
+            f"/api/performance-reviews/{self.review1.id}/complete/"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_manager_cannot_complete_own_review(self):
+        mgr_emp = Employee.objects.create(
+            first_name="Manager",
+            last_name="Reviewee",
+            email="mgr.rev@example.com",
+            date_of_birth=date(1985, 1, 1),
+            gender="M",
+            address="Addis Ababa",
+            employee_id="EMP-9904",
+            position="Lead Manager",
+            salary=95000,
+        )
+        mgr_user = _user_with_role("mgr_self_rev", "MANAGER", employee=mgr_emp)
+        mgr_review = PerformanceReview.objects.create(
+            employee=mgr_emp,
+            review_period="2026-Q1",
+            productivity=5,
+            quality=5,
+            teamwork=5,
+            communication=5,
+            leadership=5,
+            status="DRAFT",
+        )
+        self.client.force_authenticate(user=mgr_user)
+        response = self.client.post(
+            f"/api/performance-reviews/{mgr_review.id}/complete/"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("cannot complete your own", response.data["detail"])
+
+    def test_employee_cannot_acknowledge_other_employee_review(self):
+        self.review1.status = "COMPLETED"
+        self.review1.reviewer = self.manager
+        self.review1.save()
+
+        # Employee 2 attempts to acknowledge Employee 1's review
+        self.client.force_authenticate(user=self.emp2_user)
+        response = self.client.post(
+            f"/api/performance-reviews/{self.review1.id}/acknowledge/"
+        )
+        self.assertIn(
+            response.status_code, [status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND]
+        )
+
+    def test_employee_can_acknowledge_own_review(self):
+        self.review1.status = "COMPLETED"
+        self.review1.reviewer = self.manager
+        self.review1.save()
+
+        self.client.force_authenticate(user=self.emp1_user)
+        response = self.client.post(
+            f"/api/performance-reviews/{self.review1.id}/acknowledge/"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.review1.refresh_from_db()
+        self.assertEqual(self.review1.status, "ACKNOWLEDGED")
+
+    def test_employee_cannot_access_review_summary(self):
+        self.client.force_authenticate(user=self.emp1_user)
+        response = self.client.get("/api/performance-reviews/summary/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class LeaveBusinessLogicTests(APITestCase):
+    def setUp(self):
+        self.hr = _user_with_role("hr_leave_logic", "HR")
+        self.emp = Employee.objects.create(
+            first_name="Tirunesh",
+            last_name="Dibaba",
+            email="tirunesh.d@example.com",
+            date_of_birth=date(1985, 10, 1),
+            gender="F",
+            address="Addis Ababa",
+            employee_id="EMP-9920",
+            position="Athlete",
+            salary=90000,
+            annual_leave_days=30,
+        )
+        self.emp_user = _user_with_role("emp_logic_user", "EMPLOYEE", employee=self.emp)
+
+    def test_overlapping_leave_request_rejected(self):
+        self.client.force_authenticate(user=self.emp_user)
+        # Create initial leave request
+        LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2027, 4, 1),
+            end_date=date(2027, 4, 10),
+            status="PENDING",
+        )
+
+        # Attempt to create overlapping leave request via API
+        response = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": self.emp.id,
+                "leave_type": "VL",
+                "start_date": "2027-04-05",
+                "end_date": "2027-04-12",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(
+            any(
+                "overlapping" in str(msg).lower()
+                for msg in response.data.get("non_field_errors", [])
+            )
+        )
+
+    def test_overlapping_with_approved_leave_rejected(self):
+        self.client.force_authenticate(user=self.emp_user)
+        LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2027, 7, 1),
+            end_date=date(2027, 7, 10),
+            status="APPROVED",
+        )
+        response = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": self.emp.id,
+                "leave_type": "VL",
+                "start_date": "2027-07-05",
+                "end_date": "2027-07-15",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_overlap_allowed_with_cancelled_or_rejected_leave(self):
+        self.client.force_authenticate(user=self.emp_user)
+        LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2027, 8, 1),
+            end_date=date(2027, 8, 10),
+            status="CANCELLED",
+        )
+        response = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": self.emp.id,
+                "leave_type": "VL",
+                "start_date": "2027-08-02",
+                "end_date": "2027-08-06",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_non_overlapping_leave_succeeds(self):
+        self.client.force_authenticate(user=self.emp_user)
+        LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2027, 4, 1),
+            end_date=date(2027, 4, 10),
+            status="PENDING",
+        )
+
+        # Non-overlapping window
+        response = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": self.emp.id,
+                "leave_type": "VL",
+                "start_date": "2027-05-01",
+                "end_date": "2027-05-05",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_weekend_only_leave_request_rejected(self):
+        self.client.force_authenticate(user=self.emp_user)
+        # 2027-04-03 (Sat) to 2027-04-04 (Sun)
+        response = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": self.emp.id,
+                "leave_type": "VL",
+                "start_date": "2027-04-03",
+                "end_date": "2027-04-04",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(
+            any(
+                "0 working days" in str(msg).lower()
+                for msg in response.data.get("non_field_errors", [])
+            )
+        )
+
+    def test_holiday_only_leave_request_rejected(self):
+        Holiday.objects.create(
+            name="Test National Holiday",
+            date=date(2027, 6, 2),
+            description="National Holiday",
+        )
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.post(
+            "/api/leaves/",
+            {
+                "employee": self.emp.id,
+                "leave_type": "VL",
+                "start_date": "2027-06-02",
+                "end_date": "2027-06-02",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(
+            any(
+                "0 working days" in str(msg).lower()
+                for msg in response.data.get("non_field_errors", [])
+            )
+        )
+
+    def test_cannot_cancel_past_leave(self):
+        past_leave = LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2026, 1, 10),
+            end_date=date(2026, 1, 15),
+            status="APPROVED",
+        )
+
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.post(f"/api/leaves/{past_leave.id}/cancel/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("cannot be cancelled", response.data["detail"])
+        past_leave.refresh_from_db()
+        self.assertEqual(past_leave.status, "APPROVED")
+
+    def test_cannot_cancel_leave_starting_today(self):
+        from django.utils import timezone
+
+        today = timezone.now().date()
+        current_leave = LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=today,
+            end_date=today + timedelta(days=3),
+            status="APPROVED",
+        )
+
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.post(f"/api/leaves/{current_leave.id}/cancel/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("cannot be cancelled", response.data["detail"])
+        current_leave.refresh_from_db()
+        self.assertEqual(current_leave.status, "APPROVED")
+
+    def test_hr_can_cancel_past_leave(self):
+        past_leave = LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2026, 1, 12),
+            end_date=date(2026, 1, 16),
+            status="APPROVED",
+        )
+        initial_used = self.emp.annual_leave_used()
+        self.assertGreater(initial_used, 0)
+
+        self.client.force_authenticate(user=self.hr)
+        response = self.client.post(f"/api/leaves/{past_leave.id}/cancel/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        past_leave.refresh_from_db()
+        self.assertEqual(past_leave.status, "CANCELLED")
+        self.assertEqual(self.emp.annual_leave_used(), 0)
+
+
+class AttendancePunchTests(APITestCase):
+    def setUp(self):
+        self.emp = Employee.objects.create(
+            first_name="Kenenisa",
+            last_name="Bekele",
+            email="kenenisa.b@example.com",
+            date_of_birth=date(1982, 6, 13),
+            gender="M",
+            address="Addis Ababa",
+            employee_id="EMP-9930",
+            position="Champion",
+            salary=95000,
+        )
+        self.emp_user = _user_with_role("emp_punch_user", "EMPLOYEE", employee=self.emp)
+        self.manager_user = _user_with_role("mgr_punch_user", "MANAGER")
+
+    def test_employee_punch_in_and_punch_out_flow(self):
+        self.client.force_authenticate(user=self.emp_user)
+
+        # 1. First punch creates record and records check-in
+        resp1 = self.client.post("/api/attendance/punch/")
+        self.assertIn(resp1.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertIsNotNone(resp1.data["check_in"])
+        self.assertIsNone(resp1.data["check_out"])
+
+        # 2. Second punch auto-detects check-in exists and records check-out
+        resp2 = self.client.post("/api/attendance/punch/")
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(resp2.data["check_out"])
+
+        # 3. Third punch rejected (already checked out)
+        resp3 = self.client.post("/api/attendance/punch/")
+        self.assertEqual(resp3.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_manager_can_punch_for_employee(self):
+        self.client.force_authenticate(user=self.manager_user)
+        resp = self.client.post(
+            "/api/attendance/punch/",
+            {"employee": self.emp.id, "action": "check_in"},
+        )
+        self.assertIn(resp.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertIsNotNone(resp.data["check_in"])
+
+    def test_employee_cannot_delete_attendance_record(self):
+        record = AttendanceRecord.objects.create(
+            employee=self.emp,
+            date=date(2026, 3, 1),
+            status="PRESENT",
+        )
+        self.client.force_authenticate(user=self.emp_user)
+        response = self.client.delete(f"/api/attendance/{record.id}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_dedicated_punch_in_and_punch_out_endpoints(self):
+        self.client.force_authenticate(user=self.emp_user)
+
+        resp1 = self.client.post("/api/attendance/punch_in/")
+        self.assertIn(resp1.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertIsNotNone(resp1.data["check_in"])
+        self.assertIsNone(resp1.data["check_out"])
+
+        resp1_dup = self.client.post("/api/attendance/punch_in/")
+        self.assertEqual(resp1_dup.status_code, status.HTTP_400_BAD_REQUEST)
+
+        resp2 = self.client.post("/api/attendance/punch_out/")
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(resp2.data["check_out"])
+
+        resp2_dup = self.client.post("/api/attendance/punch_out/")
+        self.assertEqual(resp2_dup.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch("django.utils.timezone.now")
+    def test_punch_in_after_cutoff_flags_late(self, mock_now):
+        from datetime import datetime
+
+        mock_now.return_value = datetime(2026, 4, 15, 9, 30, 0)
+        self.client.force_authenticate(user=self.emp_user)
+        resp = self.client.post("/api/attendance/punch_in/")
+        self.assertIn(resp.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertEqual(resp.data["status"], "LATE")
+
+    @patch("django.utils.timezone.now")
+    def test_punch_in_before_cutoff_flags_present(self, mock_now):
+        from datetime import datetime
+
+        mock_now.return_value = datetime(2026, 4, 15, 8, 30, 0)
+        self.client.force_authenticate(user=self.emp_user)
+        resp = self.client.post("/api/attendance/punch_in/")
+        self.assertIn(resp.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertEqual(resp.data["status"], "PRESENT")
+
+    def test_check_in_and_check_out_collection_action_aliases(self):
+        self.client.force_authenticate(user=self.emp_user)
+
+        resp1 = self.client.post("/api/attendance/check_in/")
+        self.assertIn(resp1.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertIsNotNone(resp1.data["check_in"])
+
+        resp2 = self.client.post("/api/attendance/check_out/")
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(resp2.data["check_out"])

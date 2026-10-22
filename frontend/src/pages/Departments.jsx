@@ -11,9 +11,11 @@ import {
   Search,
 } from 'lucide-react';
 import { departmentApi } from '../api';
+import { useAuth } from '../context/useAuth';
 import './Departments.css';
 
 export default function Departments() {
+  const { isHR } = useAuth();
   const [departments, setDepartments] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -168,10 +170,12 @@ export default function Departments() {
           <h1>Department Management</h1>
           <p>Organize organizational units, teams, and active workforce distribution.</p>
         </div>
-        <button onClick={handleOpenAdd} className="btn btn-primary">
-          <Plus size={18} />
-          <span>Add Department</span>
-        </button>
+        {isHR && (
+          <button onClick={handleOpenAdd} className="btn btn-primary">
+            <Plus size={18} />
+            <span>Add Department</span>
+          </button>
+        )}
       </div>
 
       {/* Search Filter Bar */}
@@ -235,22 +239,24 @@ export default function Departments() {
                   <div className="dept-icon-badge">
                     <Building2 size={22} />
                   </div>
-                  <div className="dept-card-actions">
-                    <button
-                      onClick={() => handleOpenEdit(dept)}
-                      className="action-icon-btn"
-                      title="Edit department"
-                    >
-                      <Edit2 size={15} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(dept)}
-                      className="action-icon-btn btn-delete"
-                      title="Delete department"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
+                  {isHR && (
+                    <div className="dept-card-actions">
+                      <button
+                        onClick={() => handleOpenEdit(dept)}
+                        className="action-icon-btn"
+                        title="Edit department"
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(dept)}
+                        className="action-icon-btn btn-delete"
+                        title="Delete department"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ marginTop: '14px' }}>

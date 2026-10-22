@@ -1,3 +1,5 @@
+import contextlib
+
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from rest_framework import serializers
@@ -13,8 +15,9 @@ from .models import (
     Notification,
     Payslip,
     PerformanceReview,
+    working_days_between,
 )
-from .permissions import get_role
+from .permissions import get_role, is_hr_or_above
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -314,6 +317,30 @@ class EmployeeSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+
+        # Redact compensation & bank data for users who are not HR/Admin and not viewing their own profile
+        can_view_confidential = False
+        if user and user.is_authenticated:
+            if is_hr_or_above(user):
+                can_view_confidential = True
+            else:
+                profile = getattr(user, "profile", None)
+                if profile and profile.employee_id == instance.id:
+                    can_view_confidential = True
+
+        if not can_view_confidential:
+            ret["salary"] = None
+            ret["monthly_salary"] = None
+            ret["salary_monthly"] = None
+            ret["bank_account"] = ""
+            ret["emergency_contact_phone"] = ""
+
+        return ret
+
 
 class LeaveRequestSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source="employee.full_name", read_only=True)
@@ -372,6 +399,57 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"end_date": "End date cannot be before the start date."}
             )
+
+        if start and end:
+            holidays = Holiday.objects.filter(
+                date__gte=start, date__lte=end
+            ).values_list("date", flat=True)
+            work_days = working_days_between(start, end, holiday_dates=holidays)
+            if work_days == 0:
+                raise serializers.ValidationError(
+                    {
+                        "non_field_errors": [
+                            "The selected date range contains 0 working days (falls entirely on weekends or company holidays)."
+                        ]
+                    }
+                )
+
+        employee = attrs.get("employee")
+        if not employee and instance:
+            employee = instance.employee
+        if not employee:
+            request = self.context.get("request")
+            if request:
+                raw_emp = (
+                    getattr(request, "data", {}).get("employee")
+                    if hasattr(request, "data")
+                    else None
+                )
+                if raw_emp:
+                    with contextlib.suppress(Employee.DoesNotExist, ValueError):
+                        employee = Employee.objects.get(id=raw_emp)
+                if not employee and hasattr(request, "user"):
+                    profile = getattr(request.user, "profile", None)
+                    employee = profile.employee if profile else None
+
+        if employee and start and end:
+            overlap_qs = LeaveRequest.objects.filter(
+                employee=employee,
+                status__in=["PENDING", "APPROVED"],
+                start_date__lte=end,
+                end_date__gte=start,
+            )
+            if instance:
+                overlap_qs = overlap_qs.exclude(pk=instance.pk)
+            if overlap_qs.exists():
+                raise serializers.ValidationError(
+                    {
+                        "non_field_errors": [
+                            "You already have an active leave request overlapping these dates."
+                        ]
+                    }
+                )
+
         return attrs
 
 

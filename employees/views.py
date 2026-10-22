@@ -1,12 +1,12 @@
 from django.db.models import Avg, Count, DecimalField, Max, Q, Sum, Value
-from django.utils import timezone
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
@@ -34,10 +34,13 @@ from .notifications import (
 from .permissions import (
     ROLE_EMPLOYEE,
     ROLE_MANAGER,
+    IsAuthenticatedReadOnlyOrHROrAdmin,
     IsAuthenticatedReadOnlyOrStaff,
     IsHROrAdmin,
+    IsManagerOrAbove,
     get_role,
     is_hr_or_above,
+    is_manager_or_above,
 )
 from .serializers import (
     AttendanceRecordSerializer,
@@ -68,9 +71,9 @@ class EMSRefreshToken(RefreshToken):
     def for_user(cls, user):
         token = super().for_user(user)
 
-        # Embed role from UserProfile (defaults to 'EMPLOYEE' if no profile)
+        # Embed role using get_role (returns 'ADMIN' for superusers even without a profile)
         profile = getattr(user, "profile", None)
-        token["role"] = profile.role if profile else "EMPLOYEE"
+        token["role"] = get_role(user)
         token["username"] = user.username
         token["email"] = user.email
         token["full_name"] = (
@@ -82,19 +85,29 @@ class EMSRefreshToken(RefreshToken):
         return token
 
 
+def get_client_ip(group, request):
+    """
+    Extract the real client IP behind reverse proxies (Nginx/ALB/Cloudflare).
+    Falls back to REMOTE_ADDR if HTTP_X_FORWARDED_FOR is not provided.
+    """
+    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    if x_forwarded_for:
+        return x_forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "127.0.0.1")
+
+
 class LoginAPIView(APIView):
     """
     User login endpoint.
     Returns a JWT access token (short-lived) and a refresh token (long-lived).
-    Rate-limited to 5 POST requests per minute per IP to prevent brute-force.
-    The client should store the refresh token securely and use it to obtain
-    new access tokens via /api/auth/token/refresh/ before expiry.
+    Rate-limited to 5 POST requests per minute per client IP to prevent brute-force.
+    Properly handles X-Forwarded-For when running behind Nginx / load balancers.
     """
 
     permission_classes = [permissions.AllowAny]
 
     @method_decorator(
-        ratelimit(key="ip", rate="5/m", method="POST", block=True),
+        ratelimit(key=get_client_ip, rate="5/m", method="POST", block=True),
         name="dispatch",
     )
     def post(self, request):
@@ -265,7 +278,7 @@ class HolidayViewSet(viewsets.ModelViewSet):
 
     queryset = Holiday.objects.all().order_by("date")
     serializer_class = HolidaySerializer
-    permission_classes = [IsAuthenticatedReadOnlyOrStaff]
+    permission_classes = [IsAuthenticatedReadOnlyOrHROrAdmin]
     filter_backends = [filters.OrderingFilter, filters.SearchFilter]
     search_fields = ["name", "description"]
     ordering_fields = ["date", "name"]
@@ -634,7 +647,7 @@ class EmploymentEventViewSet(viewsets.ReadOnlyModelViewSet):
 class EmployeeDocumentViewSet(viewsets.ModelViewSet):
     """
     Upload and manage employee documents (contracts, IDs, certificates).
-    Multipart uploads; HR/admin and the owning employee can manage.
+    Multipart uploads; HR/admin can manage all, employees can only manage their own.
     """
 
     serializer_class = EmployeeDocumentSerializer
@@ -643,10 +656,22 @@ class EmployeeDocumentViewSet(viewsets.ModelViewSet):
     ordering_fields = ["uploaded_at", "title", "document_type"]
     ordering = ["-uploaded_at"]
 
+    def _own_employee(self):
+        profile = getattr(self.request.user, "profile", None)
+        return profile.employee if profile else None
+
     def get_queryset(self):
         queryset = EmployeeDocument.objects.select_related(
             "employee", "uploaded_by"
         ).all()
+
+        user = self.request.user
+        if not is_hr_or_above(user):
+            own_emp = self._own_employee()
+            if not own_emp:
+                return queryset.none()
+            queryset = queryset.filter(employee=own_emp)
+
         employee = self.request.query_params.get("employee")
         if employee:
             queryset = queryset.filter(employee_id=employee)
@@ -656,8 +681,24 @@ class EmployeeDocumentViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        document = serializer.save(uploaded_by=self.request.user)
+        user = self.request.user
+        target_employee = serializer.validated_data.get("employee")
+        if not is_hr_or_above(user):
+            own_emp = self._own_employee()
+            if not own_emp or target_employee.id != own_emp.id:
+                raise ValidationError(
+                    {"employee": "You can only upload documents for yourself."}
+                )
+        document = serializer.save(uploaded_by=user)
         notify_document_uploaded(document)
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if not is_hr_or_above(user):
+            own_emp = self._own_employee()
+            if not own_emp or instance.employee_id != own_emp.id:
+                raise PermissionDenied("You can only delete your own documents.")
+        instance.delete()
 
 
 class LeaveRequestViewSet(viewsets.ModelViewSet):
@@ -823,7 +864,11 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
-        """Cancel an approved leave request (owner, manager of the owner, HR, or admin)."""
+        """
+        Cancel an approved leave request.
+        Only uncommenced leaves (start_date > today) can be cancelled by employees or managers.
+        Commenced or past leaves require HR or Admin authorization for retroactive adjustment.
+        """
         leave = self.get_object()
         own_employee = self._own_employee()
         is_owner = own_employee and leave.employee_id == own_employee.id
@@ -838,6 +883,14 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     "detail": f"Only approved requests can be cancelled (current: {leave.status})."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        today = timezone.now().date()
+        if leave.start_date <= today and not is_hr_or_above(request.user):
+            return Response(
+                {
+                    "detail": "Leave requests that have already commenced or passed cannot be cancelled without HR/Admin authorization."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -857,6 +910,167 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["date", "status", "check_in"]
     ordering = ["-date"]
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update"]:
+            return [permissions.IsAuthenticated(), IsManagerOrAbove()]
+        if self.action == "destroy":
+            return [permissions.IsAuthenticated(), IsHROrAdmin()]
+        return [permissions.IsAuthenticated()]
+
+    def _resolve_punch_employee(self, request):
+        """Resolve target employee from request data or authenticated user profile."""
+        employee_id = request.data.get("employee")
+        if employee_id and is_manager_or_above(request.user):
+            try:
+                return Employee.objects.get(id=employee_id), None
+            except Employee.DoesNotExist:
+                return None, Response(
+                    {"detail": "Employee not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        profile = getattr(request.user, "profile", None)
+        employee = profile.employee if profile else None
+        if not employee:
+            return None, Response(
+                {"detail": "No employee record associated with this account."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return employee, None
+
+    @action(detail=False, methods=["post"], url_path="punch")
+    def punch(self, request):
+        """
+        Record a check-in or check-out for today.
+        Creates an AttendanceRecord for today if none exists yet.
+        """
+        today = timezone.now().date()
+        current_time = timezone.now().time()
+
+        employee, error_response = self._resolve_punch_employee(request)
+        if error_response:
+            return error_response
+
+        record, created = AttendanceRecord.objects.get_or_create(
+            employee=employee,
+            date=today,
+            defaults={"status": "PRESENT"},
+        )
+
+        requested_action = request.data.get("action")
+        if requested_action == "check_out" or (
+            not requested_action and record.check_in and not record.check_out
+        ):
+            if not record.check_in:
+                return Response(
+                    {"detail": "Cannot check out before checking in."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if record.check_out:
+                return Response(
+                    {"detail": "Check-out already recorded for today."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            record.check_out = current_time
+            record.save()
+            return Response(
+                AttendanceRecordSerializer(record).data, status=status.HTTP_200_OK
+            )
+        else:
+            if record.check_in:
+                return Response(
+                    {"detail": "Check-in already recorded for today."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if current_time > AttendanceRecord.LATE_CUTOFF:
+                record.status = "LATE"
+            else:
+                record.status = "PRESENT"
+            record.check_in = current_time
+            record.save()
+            return Response(
+                AttendanceRecordSerializer(record).data,
+                status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            )
+
+    @action(detail=False, methods=["post"], url_path="punch_in")
+    def punch_in(self, request):
+        """
+        Record check-in for today.
+        Creates an AttendanceRecord for today if none exists yet.
+        """
+        today = timezone.now().date()
+        current_time = timezone.now().time()
+
+        employee, error_response = self._resolve_punch_employee(request)
+        if error_response:
+            return error_response
+
+        record, created = AttendanceRecord.objects.get_or_create(
+            employee=employee,
+            date=today,
+            defaults={"status": "PRESENT"},
+        )
+
+        if record.check_in:
+            return Response(
+                {"detail": "Check-in already recorded for today."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if current_time > AttendanceRecord.LATE_CUTOFF:
+            record.status = "LATE"
+        else:
+            record.status = "PRESENT"
+        record.check_in = current_time
+        record.save()
+        return Response(
+            AttendanceRecordSerializer(record).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"], url_path="punch_out")
+    def punch_out(self, request):
+        """
+        Record check-out for today.
+        Requires an AttendanceRecord with check_in already recorded.
+        """
+        today = timezone.now().date()
+        current_time = timezone.now().time()
+
+        employee, error_response = self._resolve_punch_employee(request)
+        if error_response:
+            return error_response
+
+        record = AttendanceRecord.objects.filter(employee=employee, date=today).first()
+        if not record or not record.check_in:
+            return Response(
+                {"detail": "Cannot check out before checking in."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if record.check_out:
+            return Response(
+                {"detail": "Check-out already recorded for today."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        record.check_out = current_time
+        record.save()
+        return Response(
+            AttendanceRecordSerializer(record).data,
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"], url_path="check_in")
+    def check_in_today(self, request):
+        """Dedicated collection action for check-in on today's record."""
+        return self.punch_in(request)
+
+    @action(detail=False, methods=["post"], url_path="check_out")
+    def check_out_today(self, request):
+        """Dedicated collection action for check-out on today's record."""
+        return self.punch_out(request)
 
     def get_queryset(self):
         queryset = AttendanceRecord.objects.select_related("employee").all()
@@ -902,7 +1116,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 {"detail": "Check-in already recorded for this date."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        record.check_in = timezone.now().time()
+        current_time = timezone.now().time()
+        if current_time > AttendanceRecord.LATE_CUTOFF:
+            record.status = "LATE"
+        else:
+            record.status = "PRESENT"
+        record.check_in = current_time
         record.save()
         return Response(
             AttendanceRecordSerializer(record).data, status=status.HTTP_200_OK
@@ -991,6 +1210,18 @@ class PayslipViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["period_year", "period_month", "net_pay", "generated_at"]
     ordering = ["-period_year", "-period_month"]
+
+    def get_permissions(self):
+        if self.action in [
+            "create",
+            "update",
+            "partial_update",
+            "destroy",
+            "generate",
+            "summary",
+        ]:
+            return [permissions.IsAuthenticated(), IsHROrAdmin()]
+        return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
         queryset = Payslip.objects.select_related(
@@ -1193,6 +1424,13 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
     ordering_fields = ["review_date", "review_period", "status", "created_at"]
     ordering = ["-review_date"]
 
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "complete"]:
+            return [permissions.IsAuthenticated(), IsManagerOrAbove()]
+        if self.action == "destroy":
+            return [permissions.IsAuthenticated(), IsHROrAdmin()]
+        return [permissions.IsAuthenticated()]
+
     def get_queryset(self):
         queryset = PerformanceReview.objects.select_related(
             "employee", "employee__department", "reviewer"
@@ -1229,7 +1467,23 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
         """Mark a draft review as completed; records the reviewer."""
+        if not is_manager_or_above(request.user):
+            return Response(
+                {
+                    "detail": "Only managers or HR/administrators can complete a performance review."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         review = self.get_object()
+        profile = getattr(request.user, "profile", None)
+        user_employee = profile.employee if profile else None
+        if (review.employee.user and review.employee.user == request.user) or (
+            user_employee and user_employee.id == review.employee_id
+        ):
+            return Response(
+                {"detail": "You cannot complete your own performance review."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if review.status != "DRAFT":
             return Response(
                 {
@@ -1249,6 +1503,16 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
     def acknowledge(self, request, pk=None):
         """Employee acknowledgement of a completed review."""
         review = self.get_object()
+        profile = getattr(request.user, "profile", None)
+        user_employee = profile.employee if profile else None
+        is_evaluated_employee = (
+            review.employee.user and review.employee.user == request.user
+        ) or (user_employee and review.employee_id == user_employee.id)
+        if not is_evaluated_employee:
+            return Response(
+                {"detail": "You can only acknowledge your own performance review."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if review.status != "COMPLETED":
             return Response(
                 {
@@ -1265,6 +1529,13 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def summary(self, request):
         """Aggregate review analytics: averages, distribution, top performers."""
+        if not is_manager_or_above(request.user):
+            return Response(
+                {
+                    "detail": "Only managers or HR/administrators can view performance analytics."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         reviews = list(
             PerformanceReview.objects.select_related(
                 "employee", "employee__department"

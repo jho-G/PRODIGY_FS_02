@@ -163,7 +163,9 @@ STORAGES = {
     },
 }
 # Prevent missing sourcemap/icon 500 errors on static requests
-WHITENOISE_MANIFEST_STRICT = config("WHITENOISE_MANIFEST_STRICT", default=False, cast=bool)
+WHITENOISE_MANIFEST_STRICT = config(
+    "WHITENOISE_MANIFEST_STRICT", default=False, cast=bool
+)
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"

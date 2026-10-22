@@ -16,11 +16,13 @@ import {
   Eye,
 } from 'lucide-react';
 import { employeeApi, departmentApi } from '../api';
+import { useAuth } from '../context/useAuth';
 import EmployeeModal from '../components/EmployeeModal';
 import EmployeeDetailModal from '../components/EmployeeDetailModal';
 import './Employees.css';
 
 export default function Employees() {
+  const { isHR, isAdmin } = useAuth();
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -305,10 +307,12 @@ export default function Employees() {
             {exporting ? <span className="spinner" style={{ width: 16, height: 16 }} /> : <Download size={18} />}
             <span>{exporting ? 'Exporting...' : 'Export CSV'}</span>
           </button>
-          <button onClick={handleOpenAddModal} className="btn btn-primary">
-            <Plus size={18} />
-            <span>Add Employee</span>
-          </button>
+          {isHR && (
+            <button onClick={handleOpenAddModal} className="btn btn-primary">
+              <Plus size={18} />
+              <span>Add Employee</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -510,15 +514,17 @@ export default function Employees() {
                           >
                             <Eye size={15} />
                           </button>
-                          <button
-                            onClick={() => handleOpenEditModal(emp)}
-                            className="action-icon-btn"
-                            title="Edit employee"
-                          >
-                            <Edit2 size={15} />
-                          </button>
+                          {isHR && (
+                            <button
+                              onClick={() => handleOpenEditModal(emp)}
+                              className="action-icon-btn"
+                              title="Edit employee"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                          )}
 
-                          {emp.is_active ? (
+                          {isHR && (emp.is_active ? (
                             <button
                               onClick={() => handleSoftDelete(emp)}
                               className="action-icon-btn btn-delete"
@@ -535,15 +541,17 @@ export default function Employees() {
                               >
                                 <RotateCcw size={15} />
                               </button>
-                              <button
-                                onClick={() => handleHardDelete(emp)}
-                                className="action-icon-btn btn-delete"
-                                title="Permanently delete from database"
-                              >
-                                <Trash2 size={15} />
-                              </button>
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleHardDelete(emp)}
+                                  className="action-icon-btn btn-delete"
+                                  title="Permanently delete from database"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              )}
                             </>
-                          )}
+                          ))}
                         </div>
                       </td>
                     </tr>
