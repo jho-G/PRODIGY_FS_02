@@ -159,6 +159,7 @@ export default function Performance() {
 
   // --- Workflow actions ---------------------------------------------------
   const handleComplete = async (review) => {
+    if (!isManager) return;
     try {
       setBusyId(review.id);
       await performanceApi.complete(review.id);
@@ -519,7 +520,7 @@ export default function Performance() {
                         >
                           <Eye size={15} />
                         </button>
-                        {review.status === 'DRAFT' && (
+                        {review.status === 'DRAFT' && isManager && (
                           <button
                             onClick={() => handleComplete(review)}
                             className="action-icon-btn btn-approve"
@@ -644,7 +645,7 @@ export default function Performance() {
             </div>
 
             <div className="modal-footer">
-              {detailReview.status === 'DRAFT' && (
+              {detailReview.status === 'DRAFT' && isManager && (
                 <button
                   className="btn btn-primary"
                   onClick={() => handleComplete(detailReview)}
