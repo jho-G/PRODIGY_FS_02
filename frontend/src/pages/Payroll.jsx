@@ -186,6 +186,7 @@ export default function Payroll() {
   };
 
   const handleDelete = async (slip) => {
+    if (!isHR) return;
     const confirmed = window.confirm(
       `Delete the ${slip.period_label} payslip for ${slip.employee_name}?`
     );
