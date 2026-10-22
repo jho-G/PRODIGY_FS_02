@@ -41,7 +41,6 @@ from .models import (
     UserProfile,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -390,7 +389,7 @@ class LeaveWorkflowTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_leave_type_sick_does_not_affect_vacation_balance(self):
-        sick_leave = LeaveRequest.objects.create(
+        LeaveRequest.objects.create(
             employee=self.employee,
             leave_type="SL",
             start_date=_days_ago(-1),
@@ -1261,9 +1260,7 @@ class SecurityTests(APITestCase):
 
         # Try using the blacklisted refresh token
         self.client.force_authenticate(user=None)
-        response = self.client.post(
-            "/api/auth/token/refresh/", {"refresh": refresh}
-        )
+        response = self.client.post("/api/auth/token/refresh/", {"refresh": refresh})
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_logout_requires_refresh_token(self):
@@ -1486,7 +1483,6 @@ class IntegrationTests(APITestCase):
         get_again = self.client.get(f"/api/employees/{emp_id}/")
         self.assertEqual(get_again.status_code, status.HTTP_200_OK)
 
-
     def test_leave_approval_deducts_balance(self):
         """Submit leave → approve → verify remaining balance."""
         emp = _make_employee(
@@ -1534,9 +1530,7 @@ class IntegrationTests(APITestCase):
         )
         self.assertEqual(gen_resp.status_code, status.HTTP_200_OK)
 
-        payslip = Payslip.objects.get(
-            employee=emp, period_year=2025, period_month=12
-        )
+        payslip = Payslip.objects.get(employee=emp, period_year=2025, period_month=12)
         self.assertEqual(payslip.basic_salary, expected_monthly)
 
 
@@ -1694,7 +1688,9 @@ class PayslipPermissionTests(APITestCase):
 
     def test_employee_cannot_generate_payroll(self):
         self.client.force_authenticate(user=self.emp_user)
-        response = self.client.post("/api/payslips/generate/", {"year": 2026, "month": 7})
+        response = self.client.post(
+            "/api/payslips/generate/", {"year": 2026, "month": 7}
+        )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_employee_cannot_create_payslip(self):
@@ -1895,7 +1891,10 @@ class LeaveBusinessLogicTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertTrue(
-            any("overlapping" in str(msg).lower() for msg in response.data.get("non_field_errors", []))
+            any(
+                "overlapping" in str(msg).lower()
+                for msg in response.data.get("non_field_errors", [])
+            )
         )
 
     def test_overlapping_with_approved_leave_rejected(self):
@@ -1974,7 +1973,10 @@ class LeaveBusinessLogicTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertTrue(
-            any("0 working days" in str(msg).lower() for msg in response.data.get("non_field_errors", []))
+            any(
+                "0 working days" in str(msg).lower()
+                for msg in response.data.get("non_field_errors", [])
+            )
         )
 
     def test_holiday_only_leave_request_rejected(self):
@@ -1995,7 +1997,10 @@ class LeaveBusinessLogicTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertTrue(
-            any("0 working days" in str(msg).lower() for msg in response.data.get("non_field_errors", []))
+            any(
+                "0 working days" in str(msg).lower()
+                for msg in response.data.get("non_field_errors", [])
+            )
         )
 
     def test_cannot_cancel_past_leave(self):
@@ -2016,6 +2021,7 @@ class LeaveBusinessLogicTests(APITestCase):
 
     def test_cannot_cancel_leave_starting_today(self):
         from django.utils import timezone
+
         today = timezone.now().date()
         current_leave = LeaveRequest.objects.create(
             employee=self.emp,
@@ -2125,6 +2131,7 @@ class AttendancePunchTests(APITestCase):
     @patch("django.utils.timezone.now")
     def test_punch_in_after_cutoff_flags_late(self, mock_now):
         from datetime import datetime
+
         mock_now.return_value = datetime(2026, 4, 15, 9, 30, 0)
         self.client.force_authenticate(user=self.emp_user)
         resp = self.client.post("/api/attendance/punch_in/")
@@ -2134,6 +2141,7 @@ class AttendancePunchTests(APITestCase):
     @patch("django.utils.timezone.now")
     def test_punch_in_before_cutoff_flags_present(self, mock_now):
         from datetime import datetime
+
         mock_now.return_value = datetime(2026, 4, 15, 8, 30, 0)
         self.client.force_authenticate(user=self.emp_user)
         resp = self.client.post("/api/attendance/punch_in/")
@@ -2150,10 +2158,3 @@ class AttendancePunchTests(APITestCase):
         resp2 = self.client.post("/api/attendance/check_out/")
         self.assertEqual(resp2.status_code, status.HTTP_200_OK)
         self.assertIsNotNone(resp2.data["check_out"])
-
-
-
-
-
-
-

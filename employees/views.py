@@ -1,7 +1,7 @@
 from django.db.models import Avg, Count, DecimalField, Max, Q, Sum, Value
-from django.utils import timezone
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
 from rest_framework import filters, permissions, status, viewsets
@@ -1506,9 +1506,8 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
         profile = getattr(request.user, "profile", None)
         user_employee = profile.employee if profile else None
         is_evaluated_employee = (
-            (review.employee.user and review.employee.user == request.user)
-            or (user_employee and review.employee_id == user_employee.id)
-        )
+            review.employee.user and review.employee.user == request.user
+        ) or (user_employee and review.employee_id == user_employee.id)
         if not is_evaluated_employee:
             return Response(
                 {"detail": "You can only acknowledge your own performance review."},

@@ -103,4 +103,3 @@ class IsAuthenticatedReadOnlyOrHROrAdmin(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         return is_hr_or_above(request.user)
-

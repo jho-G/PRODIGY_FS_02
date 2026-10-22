@@ -1,3 +1,5 @@
+import contextlib
+
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from rest_framework import serializers
@@ -418,12 +420,14 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         if not employee:
             request = self.context.get("request")
             if request:
-                raw_emp = getattr(request, "data", {}).get("employee") if hasattr(request, "data") else None
+                raw_emp = (
+                    getattr(request, "data", {}).get("employee")
+                    if hasattr(request, "data")
+                    else None
+                )
                 if raw_emp:
-                    try:
+                    with contextlib.suppress(Employee.DoesNotExist, ValueError):
                         employee = Employee.objects.get(id=raw_emp)
-                    except (Employee.DoesNotExist, ValueError):
-                        pass
                 if not employee and hasattr(request, "user"):
                     profile = getattr(request.user, "profile", None)
                     employee = profile.employee if profile else None
