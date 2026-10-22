@@ -64,6 +64,7 @@ export default function Departments() {
   }, [isModalOpen]);
 
   const handleOpenAdd = () => {
+    if (!isHR) return;
     setEditingDept(null);
     setDeptForm({ name: '', description: '' });
     setFormError('');
@@ -71,6 +72,7 @@ export default function Departments() {
   };
 
   const handleOpenEdit = (dept) => {
+    if (!isHR) return;
     setEditingDept(dept);
     setDeptForm({ name: dept.name, description: dept.description || '' });
     setFormError('');
@@ -79,6 +81,10 @@ export default function Departments() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isHR) {
+      setFormError('You do not have permission to perform this action.');
+      return;
+    }
     if (!deptForm.name.trim()) {
       setFormError('Department name is required.');
       return;
@@ -111,6 +117,7 @@ export default function Departments() {
   };
 
   const handleDelete = async (dept) => {
+    if (!isHR) return;
     const activeCount = dept.employee_count || 0;
     const confirmMsg = activeCount > 0
       ? `Department "${dept.name}" has ${activeCount} active employee(s). Are you sure you want to delete it? Employees will have their department unassigned.`
@@ -216,10 +223,12 @@ export default function Departments() {
           <Building2 size={44} style={{ opacity: 0.3, margin: '0 auto 12px' }} />
           <h2 style={{ fontSize: '1.2rem', marginBottom: '6px' }}>No Departments Yet</h2>
           <p style={{ marginBottom: '18px' }}>Create departments to organize your employees and workforce units.</p>
-          <button onClick={handleOpenAdd} className="btn btn-primary btn-sm">
-            <Plus size={16} />
-            <span>Create First Department</span>
-          </button>
+          {isHR && (
+            <button onClick={handleOpenAdd} className="btn btn-primary btn-sm">
+              <Plus size={16} />
+              <span>Create First Department</span>
+            </button>
+          )}
         </div>
       ) : filteredDepartments.length === 0 ? (
         <div className="table-card" style={{ padding: '48px', textAlign: 'center' }}>
