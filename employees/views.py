@@ -88,11 +88,20 @@ class EMSRefreshToken(RefreshToken):
 def get_client_ip(group, request):
     """
     Extract the real client IP behind reverse proxies (Nginx/ALB/Cloudflare).
-    Falls back to REMOTE_ADDR if HTTP_X_FORWARDED_FOR is not provided.
+    Prefers HTTP_X_REAL_IP set explicitly by the trusted reverse proxy,
+    then parses HTTP_X_FORWARDED_FOR safely (using the last client IP appended
+    by the proxy), and falls back to REMOTE_ADDR.
     """
+    x_real_ip = request.META.get("HTTP_X_REAL_IP")
+    if x_real_ip and x_real_ip.strip():
+        return x_real_ip.strip()
+
     x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if x_forwarded_for:
-        return x_forwarded_for.split(",")[0].strip()
+        parts = [ip.strip() for ip in x_forwarded_for.split(",") if ip.strip()]
+        if parts:
+            return parts[-1]
+
     return request.META.get("REMOTE_ADDR", "127.0.0.1")
 
 

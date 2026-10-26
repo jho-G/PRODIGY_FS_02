@@ -1293,6 +1293,30 @@ class SecurityTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_get_client_ip_prioritizes_real_ip_and_handles_forwarded_for(self):
+        from unittest.mock import MagicMock
+
+        from employees.views import get_client_ip
+
+        req = MagicMock()
+        req.META = {
+            "HTTP_X_REAL_IP": "203.0.113.195",
+            "HTTP_X_FORWARDED_FOR": "198.51.100.1, 203.0.113.195",
+            "REMOTE_ADDR": "127.0.0.1",
+        }
+        self.assertEqual(get_client_ip("login", req), "203.0.113.195")
+
+        # When X-Real-IP is absent, last entry of X-Forwarded-For is returned (untrusted proxy hop)
+        req.META = {
+            "HTTP_X_FORWARDED_FOR": "spoofed.ip.1.1, 198.51.100.42",
+            "REMOTE_ADDR": "127.0.0.1",
+        }
+        self.assertEqual(get_client_ip("login", req), "198.51.100.42")
+
+        # Fallback to REMOTE_ADDR
+        req.META = {"REMOTE_ADDR": "192.0.2.1"}
+        self.assertEqual(get_client_ip("login", req), "192.0.2.1")
+
 
 # ---------------------------------------------------------------------------
 # Serializer Validation Tests
