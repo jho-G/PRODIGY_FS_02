@@ -38,6 +38,9 @@ venv.bak/
 *.crt
 *.csr
 *.pfx
+*.pem
+frontend/ssl/*
+!frontend/ssl/.gitkeep
 
 # Test & coverage artifacts
 .coverage
