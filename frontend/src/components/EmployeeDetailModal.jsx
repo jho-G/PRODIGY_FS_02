@@ -53,6 +53,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
   const [uploadFile, setUploadFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [docError, setDocError] = useState('');
+  const [downloadingDocId, setDownloadingDocId] = useState(null);
 
   useEffect(() => {
     if (!employee) return;
@@ -135,6 +136,23 @@ export default function EmployeeDetailModal({ employee, onClose }) {
       fetchDocuments();
     } catch (err) {
       console.error('Failed to delete document:', err);
+    }
+  };
+
+  const handleViewDocument = async (doc) => {
+    try {
+      setDownloadingDocId(doc.id);
+      const response = await documentApi.download(doc.id);
+      const contentType = response.headers?.['content-type'] || 'application/octet-stream';
+      const blob = new Blob([response.data], { type: contentType });
+      const blobUrl = window.URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
+    } catch (err) {
+      console.error('Failed to view document:', err);
+      alert('Unable to load document. Please try again.');
+    } finally {
+      setDownloadingDocId(null);
     }
   };
 
@@ -399,19 +417,17 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                         </div>
                       </div>
                       <div className="document-actions">
-                        {doc.file_url && (
-                          <a
-                            href={doc.file_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-secondary btn-sm"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 8px' }}
-                            title="Open document"
-                          >
-                            <ExternalLink size={13} />
-                            <span>View</span>
-                          </a>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleViewDocument(doc)}
+                          disabled={downloadingDocId === doc.id}
+                          className="btn btn-secondary btn-sm"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 8px' }}
+                          title="Open document"
+                        >
+                          <ExternalLink size={13} />
+                          <span>{downloadingDocId === doc.id ? 'Loading...' : 'View'}</span>
+                        </button>
                         {isHR && (
                           <button
                             type="button"

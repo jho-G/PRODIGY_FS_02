@@ -174,6 +174,12 @@ export const documentApi = {
     const response = await api.delete(`documents/${id}/`);
     return response.data;
   },
+  download: async (id) => {
+    const response = await api.get(`documents/${id}/download/`, {
+      responseType: 'blob',
+    });
+    return response;
+  },
 };
 
 /**
