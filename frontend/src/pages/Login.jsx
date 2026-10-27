@@ -140,9 +140,11 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="demo-hint">
-          Log in with the Django superuser credentials created via <code>python manage.py createsuperuser</code>.
-        </div>
+        {import.meta.env.DEV && (
+          <div className="demo-hint">
+            Log in with the Django superuser credentials created via <code>python manage.py createsuperuser</code>.
+          </div>
+        )}
       </div>
     </div>
   );
