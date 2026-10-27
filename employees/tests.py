@@ -20,10 +20,13 @@ Tests are organized by concern:
   IntegrationTests           — End-to-end request→model→response flows
 """
 
+import shutil
+import tempfile
 from datetime import date, time, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -1615,8 +1618,16 @@ class DeploymentConfigTests(APITestCase):
 # Employee Document Permission Tests
 # ---------------------------------------------------------------------------
 
+_TEMP_MEDIA_ROOT = tempfile.mkdtemp()
 
+
+@override_settings(MEDIA_ROOT=_TEMP_MEDIA_ROOT)
 class EmployeeDocumentPermissionTests(APITestCase):
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(_TEMP_MEDIA_ROOT, ignore_errors=True)
+
     def setUp(self):
         self.hr_user = _user_with_role("hr_doc_officer", "HR")
         self.emp1 = Employee.objects.create(
@@ -1686,6 +1697,36 @@ class EmployeeDocumentPermissionTests(APITestCase):
         delete_resp = self.client.delete(f"/api/documents/{self.doc1.id}/")
         self.assertEqual(delete_resp.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(EmployeeDocument.objects.filter(id=self.doc1.id).exists())
+
+    def test_employee_can_download_own_document_with_security_headers(self):
+        from django.core.files.base import ContentFile
+
+        self.doc1.file.save(
+            "contract.pdf", ContentFile(b"%PDF-1.4 test contract content")
+        )
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get(f"/api/documents/{self.doc1.id}/download/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.headers.get("X-Content-Type-Options"), "nosniff")
+        self.assertIn("inline", response.headers.get("Content-Disposition", ""))
+
+    def test_employee_cannot_download_other_employee_document(self):
+        from django.core.files.base import ContentFile
+
+        self.doc2.file.save("passport.pdf", ContentFile(b"%PDF-1.4 sensitive passport"))
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get(f"/api/documents/{self.doc2.id}/download/")
+        self.assertIn(
+            response.status_code, [status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN]
+        )
+
+    def test_unauthenticated_cannot_download_document(self):
+        from django.core.files.base import ContentFile
+
+        self.doc1.file.save("contract.pdf", ContentFile(b"%PDF-1.4 sample content"))
+        self.client.logout()
+        response = self.client.get(f"/api/documents/{self.doc1.id}/download/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 class PayslipPermissionTests(APITestCase):

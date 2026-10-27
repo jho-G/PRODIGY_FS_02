@@ -1,6 +1,8 @@
+import os
+
 from django.db.models import Avg, Count, DecimalField, Max, Q, Sum, Value
 from django.db.models.functions import Coalesce
-from django.http import HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
@@ -708,6 +710,24 @@ class EmployeeDocumentViewSet(viewsets.ModelViewSet):
             if not own_emp or instance.employee_id != own_emp.id:
                 raise PermissionDenied("You can only delete your own documents.")
         instance.delete()
+
+    @action(detail=True, methods=["get"], url_path="download")
+    def download(self, request, pk=None):
+        """
+        Securely stream an uploaded document with permission verification,
+        nosniff MIME protection, and Content-Disposition header.
+        """
+        document = self.get_object()
+        if not document.file:
+            raise Http404("Document file not found.")
+
+        filename = os.path.basename(document.file.name)
+        response = FileResponse(
+            document.file.open("rb"), as_attachment=False, filename=filename
+        )
+        response["X-Content-Type-Options"] = "nosniff"
+        response["Content-Disposition"] = f'inline; filename="{filename}"'
+        return response
 
 
 class LeaveRequestViewSet(viewsets.ModelViewSet):
