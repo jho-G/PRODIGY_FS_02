@@ -1606,6 +1606,20 @@ class DeploymentConfigTests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["status"], "healthy")
+        self.assertEqual(response.json()["database"], "ok")
+
+    def test_health_check_database_unhealthy(self):
+        from django.db import OperationalError
+        from django.urls import reverse
+
+        with patch(
+            "django.db.connection.ensure_connection",
+            side_effect=OperationalError("Connection failed"),
+        ):
+            response = self.client.get(reverse("health_check"))
+            self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+            self.assertEqual(response.json()["status"], "degraded")
+            self.assertIn("unhealthy", response.json()["database"])
 
     def test_upload_memory_limits_configured(self):
         from django.conf import settings
