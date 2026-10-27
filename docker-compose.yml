@@ -30,7 +30,8 @@ services:
     container_name: ems_backend
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      # Bind backend only to loopback interface to prevent bypassing Nginx SSL & rate limits
+      - "127.0.0.1:8000:8000"
     volumes:
       # Persist SQLite fallback database file between container restarts
       - ./db.sqlite3:/app/db.sqlite3
@@ -66,7 +67,6 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "5173:443"
     volumes:
       # Mount SSL certificate and private key securely into Nginx
       - ./frontend/ssl:/etc/nginx/ssl:ro
