@@ -48,3 +48,9 @@ frontend/ssl/*
 coverage.xml
 htmlcov/
 docker-compose
+
+# Database Backups & Dumps
+backups/
+*.sql
+*.sql.gz
+*.sql.gz.sha256

@@ -52,6 +52,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 23 | Documentation | Document 4.3 backup pipeline, parameters, checksums, and restore runbook | Completed |
 | 24 | Backup Service | Create scripts/backup_entrypoint.sh for Alpine crond scheduled execution | Completed |
 | 25 | Docker Compose | Add db_backup automated service container with cron scheduler | Completed |
+| 26 | Docker Compose | Add backups_data volume and ignore backup dumps in .gitignore | Completed |
 
 ---
 
