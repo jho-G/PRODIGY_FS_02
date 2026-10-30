@@ -54,6 +54,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 25 | Docker Compose | Add db_backup automated service container with cron scheduler | Completed |
 | 26 | Docker Compose | Add backups_data volume and ignore backup dumps in .gitignore | Completed |
 | 27 | Documentation | Document containerized backup service lifecycle and cloud replication strategy | Completed |
+| 28 | Tests | Add tests asserting backup/restore script existence, permissions, and CLI help | Completed |
 
 ---
 

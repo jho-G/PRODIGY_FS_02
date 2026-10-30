@@ -1650,6 +1650,42 @@ class DeploymentConfigTests(APITestCase):
         self.assertTrue(hasattr(redis, "__version__"))
         self.assertIn("default", settings.CACHES)
 
+    def test_backup_and_restore_scripts_exist_and_executable(self):
+        import os
+
+        from django.conf import settings
+
+        scripts = [
+            settings.BASE_DIR / "scripts" / "backup_db.sh",
+            settings.BASE_DIR / "scripts" / "restore_db.sh",
+            settings.BASE_DIR / "scripts" / "backup_entrypoint.sh",
+        ]
+        for script_path in scripts:
+            self.assertTrue(script_path.exists(), f"Missing script: {script_path}")
+            self.assertTrue(
+                os.access(script_path, os.X_OK),
+                f"Script is not executable: {script_path}",
+            )
+            content = script_path.read_text()
+            self.assertTrue(content.startswith("#!"))
+
+    def test_backup_and_restore_scripts_cli_help(self):
+        import subprocess
+
+        from django.conf import settings
+
+        for script_name in ["backup_db.sh", "restore_db.sh"]:
+            script_path = str(settings.BASE_DIR / "scripts" / script_name)
+            res = subprocess.run(
+                [script_path, "--help"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            self.assertEqual(res.returncode, 0)
+            self.assertIn("Usage:", res.stdout)
+
+
 
 # ---------------------------------------------------------------------------
 # Employee Document Permission Tests
