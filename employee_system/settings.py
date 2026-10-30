@@ -15,6 +15,7 @@ Production deployment notes:
 """
 
 import logging
+import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -203,12 +204,17 @@ REST_FRAMEWORK = {
     "DATETIME_FORMAT": "%Y-%m-%dT%H:%M:%SZ",
 }
 
-# django-ratelimit uses Django's cache framework; default cache is in-memory.
-# In production, switch to Redis: django.core.cache.backends.redis.RedisCache
+# ---------------------------------------------------------------------------
+# Caching & Distributed Rate Limiting (Phase 4.1)
+# ---------------------------------------------------------------------------
+# django-ratelimit uses Django's cache framework to track rate limit buckets.
+# Using Redis ensures distributed rate limiting across all Gunicorn worker processes.
+REDIS_URL = config("REDIS_URL", default="redis://redis:6379/1")
+
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "ems-ratelimit-cache",
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
     }
 }
 RATELIMIT_USE_CACHE = "default"
