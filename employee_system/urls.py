@@ -2,6 +2,8 @@
 URL configuration for employee_system project.
 """
 
+import logging
+
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -10,6 +12,8 @@ from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import include, path
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 
 def health_check(request):
@@ -22,7 +26,8 @@ def health_check(request):
     try:
         connection.ensure_connection()
         db_ok = True
-    except Exception:
+    except Exception as exc:
+        logger.warning("Database health check probe failed: %s", exc)
         db_ok = False
 
     status_code = 200 if db_ok else 503

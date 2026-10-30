@@ -41,6 +41,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 12 | Tests | Add test_cache_configuration_and_redis_support in DeploymentConfigTests | Completed |
 | 13 | Documentation | Document 4.1 Redis configuration semantics and verification outcomes | Completed |
 | 14 | Health Endpoint | Update health_check to verify DB connection and return status/database fields | Completed |
+| 15 | Health Endpoint | Add diagnostic warning logger on database connection probe failures | Completed |
 
 ---
 
