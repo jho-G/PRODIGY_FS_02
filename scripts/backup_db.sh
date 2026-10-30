@@ -56,6 +56,12 @@ if pg_dump \
         sha256sum "${BACKUP_FILEPATH}" > "${BACKUP_FILEPATH}.sha256"
         echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Generated checksum: ${BACKUP_FILENAME}.sha256"
     fi
+
+    # Prune backups older than BACKUP_KEEP_DAYS
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Pruning backups older than ${BACKUP_KEEP_DAYS} days in ${BACKUP_DIR}..."
+    DELETED_COUNT="$(find "${BACKUP_DIR}" -maxdepth 1 -name "ems_backup_*.sql.gz*" -type f -mtime +"${BACKUP_KEEP_DAYS}" -print -delete | wc -l)"
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Pruned ${DELETED_COUNT} expired backup file(s)."
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Backup and retention lifecycle finished successfully."
 else
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ERROR: Database backup failed!" >&2
     rm -f "${BACKUP_FILEPATH}"
