@@ -55,6 +55,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 26 | Docker Compose | Add backups_data volume and ignore backup dumps in .gitignore | Completed |
 | 27 | Documentation | Document containerized backup service lifecycle and cloud replication strategy | Completed |
 | 28 | Tests | Add tests asserting backup/restore script existence, permissions, and CLI help | Completed |
+| 29 | Code Quality | Format and validate entire codebase with ruff linter and formatter | Completed |
 
 ---
 

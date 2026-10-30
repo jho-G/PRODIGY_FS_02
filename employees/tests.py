@@ -1686,7 +1686,6 @@ class DeploymentConfigTests(APITestCase):
             self.assertIn("Usage:", res.stdout)
 
 
-
 # ---------------------------------------------------------------------------
 # Employee Document Permission Tests
 # ---------------------------------------------------------------------------
