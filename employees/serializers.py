@@ -109,7 +109,9 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
 
     def get_file_url(self, obj):
         try:
-            return obj.file.url
+            if obj.file:
+                return f"/api/documents/{obj.id}/download/"
+            return None
         except ValueError:
             return None
 

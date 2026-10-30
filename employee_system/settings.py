@@ -15,6 +15,7 @@ Production deployment notes:
 """
 
 import logging
+import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -203,14 +204,29 @@ REST_FRAMEWORK = {
     "DATETIME_FORMAT": "%Y-%m-%dT%H:%M:%SZ",
 }
 
-# django-ratelimit uses Django's cache framework; default cache is in-memory.
-# In production, switch to Redis: django.core.cache.backends.redis.RedisCache
+# ---------------------------------------------------------------------------
+# Caching & Distributed Rate Limiting (Phase 4.1)
+# ---------------------------------------------------------------------------
+# django-ratelimit uses Django's cache framework to track rate limit buckets.
+# Using Redis ensures distributed rate limiting across all Gunicorn worker processes.
+REDIS_URL = config("REDIS_URL", default="redis://redis:6379/1")
+
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "ems-ratelimit-cache",
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
     }
 }
+
+# In test runs, fall back to LocMemCache so tests execute hermetically without requiring a live Redis server
+if "test" in sys.argv:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "ems-test-cache",
+        }
+    }
+
 RATELIMIT_USE_CACHE = "default"
 
 # ---------------------------------------------------------------------------
@@ -290,15 +306,15 @@ CSRF_TRUSTED_ORIGINS = config(
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Redirect all HTTP to HTTPS in production
-SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=False, cast=bool)
+SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool)
 
 # Protect session cookies
-SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=False, cast=bool)
+SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=not DEBUG, cast=bool)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 
 # Protect CSRF cookies
-CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=False, cast=bool)
+CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=not DEBUG, cast=bool)
 CSRF_COOKIE_HTTPONLY = True
 
 # HTTP Strict Transport Security — browsers will only use HTTPS for 1 year

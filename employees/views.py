@@ -1,6 +1,8 @@
+import os
+
 from django.db.models import Avg, Count, DecimalField, Max, Q, Sum, Value
 from django.db.models.functions import Coalesce
-from django.http import HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
@@ -88,11 +90,20 @@ class EMSRefreshToken(RefreshToken):
 def get_client_ip(group, request):
     """
     Extract the real client IP behind reverse proxies (Nginx/ALB/Cloudflare).
-    Falls back to REMOTE_ADDR if HTTP_X_FORWARDED_FOR is not provided.
+    Prefers HTTP_X_REAL_IP set explicitly by the trusted reverse proxy,
+    then parses HTTP_X_FORWARDED_FOR safely (using the last client IP appended
+    by the proxy), and falls back to REMOTE_ADDR.
     """
+    x_real_ip = request.META.get("HTTP_X_REAL_IP")
+    if x_real_ip and x_real_ip.strip():
+        return x_real_ip.strip()
+
     x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if x_forwarded_for:
-        return x_forwarded_for.split(",")[0].strip()
+        parts = [ip.strip() for ip in x_forwarded_for.split(",") if ip.strip()]
+        if parts:
+            return parts[-1]
+
     return request.META.get("REMOTE_ADDR", "127.0.0.1")
 
 
@@ -699,6 +710,24 @@ class EmployeeDocumentViewSet(viewsets.ModelViewSet):
             if not own_emp or instance.employee_id != own_emp.id:
                 raise PermissionDenied("You can only delete your own documents.")
         instance.delete()
+
+    @action(detail=True, methods=["get"], url_path="download")
+    def download(self, request, pk=None):
+        """
+        Securely stream an uploaded document with permission verification,
+        nosniff MIME protection, and Content-Disposition header.
+        """
+        document = self.get_object()
+        if not document.file:
+            raise Http404("Document file not found.")
+
+        filename = os.path.basename(document.file.name)
+        response = FileResponse(
+            document.file.open("rb"), as_attachment=False, filename=filename
+        )
+        response["X-Content-Type-Options"] = "nosniff"
+        response["Content-Disposition"] = f'inline; filename="{filename}"'
+        return response
 
 
 class LeaveRequestViewSet(viewsets.ModelViewSet):
