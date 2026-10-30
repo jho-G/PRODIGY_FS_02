@@ -45,6 +45,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 16 | Tests | Update health check tests to validate connected/unavailable status | Completed |
 | 17 | Tests | Add ISO-8601 timestamp payload parsing test in health check suite | Completed |
 | 18 | Documentation | Document 4.2 active DB health check architecture and payload contract | Completed |
+| 19 | Backup Strategy | Create scripts/backup_db.sh with pg_dump gzip pipeline and SHA-256 checksums | Completed |
 
 ---
 
