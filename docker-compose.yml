@@ -21,6 +21,16 @@ services:
       - ems_network
 
   # ============================================================
+  # Redis Distributed Cache Service (Phase 4.1 Rate Limiting)
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    container_name: ems_redis
+    restart: unless-stopped
+    networks:
+      - ems_network
+
+  # ============================================================
   # Django REST Framework Backend Service
   # ============================================================
   backend:
