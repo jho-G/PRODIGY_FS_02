@@ -1621,6 +1621,19 @@ class DeploymentConfigTests(APITestCase):
             self.assertEqual(response.json()["status"], "unhealthy")
             self.assertEqual(response.json()["database"], "unavailable")
 
+    def test_health_check_payload_timestamp_format(self):
+        from datetime import datetime
+
+        from django.urls import reverse
+
+        response = self.client.get(reverse("health_check"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ts_str = response.json().get("timestamp")
+        self.assertIsNotNone(ts_str)
+        # Verify timestamp can be parsed as a valid ISO datetime
+        parsed = datetime.fromisoformat(ts_str)
+        self.assertIsNotNone(parsed)
+
     def test_upload_memory_limits_configured(self):
         from django.conf import settings
 

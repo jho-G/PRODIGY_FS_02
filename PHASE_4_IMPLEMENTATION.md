@@ -43,6 +43,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 14 | Health Endpoint | Update health_check to verify DB connection and return status/database fields | Completed |
 | 15 | Health Endpoint | Add diagnostic warning logger on database connection probe failures | Completed |
 | 16 | Tests | Update health check tests to validate connected/unavailable status | Completed |
+| 17 | Tests | Add ISO-8601 timestamp payload parsing test in health check suite | Completed |
 
 ---
 
