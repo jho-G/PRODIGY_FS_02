@@ -56,6 +56,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 27 | Documentation | Document containerized backup service lifecycle and cloud replication strategy | Completed |
 | 28 | Tests | Add tests asserting backup/restore script existence, permissions, and CLI help | Completed |
 | 29 | Code Quality | Format and validate entire codebase with ruff linter and formatter | Completed |
+| 30 | Operations | Add disaster recovery drill checklist, system architecture diagram, and operational runbook | Completed |
 
 ---
 
@@ -270,6 +271,62 @@ Example offsite sync cronjob using AWS CLI / S3:
 ```bash
 aws s3 sync /backups/ s3://company-ems-db-backups/production/ --sse AES256
 ```
+
+---
+
+## Phase 4 Operational Runbook & Disaster Recovery Protocol
+
+### Disaster Recovery Drill Checklist
+
+Execute this drill quarterly to certify business continuity:
+
+| Phase | Action Item | Verification Command / Metric | Target RPO / RTO |
+|-------|-------------|-------------------------------|------------------|
+| **T-0** | Disaster Declaration (Corrupted DB / Host Loss) | System status alert via `/health/` returns HTTP 503 | < 1 min detection |
+| **T+5m** | Locate Latest Valid Snapshot | `ls -lt /backups/*.sql.gz \| head -n 1` | RPO <= 24 hours |
+| **T+8m** | Verify SHA-256 Checksum Integrity | `sha256sum -c ems_backup_*.sql.gz.sha256` | 100% digest match |
+| **T+12m** | Provision Fresh Database Container | `docker compose up -d db` | Healthy state in < 30s |
+| **T+15m** | Execute Database Restoration Script | `./scripts/restore_db.sh /backups/<SNAPSHOT>.sql.gz --yes` | Exit code 0 |
+| **T+18m** | Probe Health Endpoint & DB Connectivity | `curl -f http://localhost:8000/health/` | `status: healthy, database: connected` |
+| **T+20m** | Validate RBAC & Employee Data Integrity | Automated test suite execution | 100% tests pass (RTO <= 20 min) |
+
+### Complete System Architecture Topology (Phase 4 Hardened)
+
+```
+                       +-------------------------------------------------------+
+                       |              Nginx Reverse Proxy (:80 / :443)         |
+                       |       - TLS Termination & HTTP Strict Transport       |
+                       |       - Static (/static/) & Media (/media/) Serving   |
+                       |       - Health Check Pass-through (/health/)          |
+                       +---------------------------+---------------------------+
+                                                   |
+                             +---------------------+---------------------+
+                             |                                           |
+               +-------------v-------------+               +-------------v-------------+
+               |  Vite React Frontend SPA  |               |    Gunicorn Django WSGI   |
+               |  - AuthContext & RBAC UI  |               |  - 3 Worker Processes     |
+               |  - Strict Role Buttons    |               |  - django-ratelimit       |
+               +---------------------------+               +-------------+-------------+
+                                                                         |
+                                              +--------------------------+--------------------------+
+                                              |                                                     |
+                               +--------------v--------------+                       +--------------v--------------+
+                               |     Redis 7 Cache Cluster   |                       |    PostgreSQL 16 Database   |
+                               |  - Centralized Rate Limits  |                       |  - User Profiles & RBAC     |
+                               |  - Session Offloading       |                       |  - Active Connection Probe  |
+                               |  - allkeys-lru (256mb)      |                       |  - ems_db Production Data   |
+                               +-----------------------------+                       +--------------^--------------+
+                                                                                                    |
+                                                                                     +--------------+--------------+
+                                                                                     |   ems_db_backup (Alpine)    |
+                                                                                     |  - Crond Scheduler (Daily)  |
+                                                                                     |  - pg_dump | gzip Pipeline  |
+                                                                                     |  - SHA-256 Checksumming     |
+                                                                                     |  - 14-Day Retention Pruning |
+                                                                                     |  - Persistent backups_data  |
+                                                                                     +-----------------------------+
+```
+
 
 
 
