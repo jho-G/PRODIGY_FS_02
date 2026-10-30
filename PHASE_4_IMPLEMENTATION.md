@@ -38,6 +38,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 9 | Django Settings | Configure CACHES default backend with django.core.cache.backends.redis.RedisCache | Completed |
 | 10 | Django Settings | Add hermetic LocMemCache fallback for test suite execution | Completed |
 | 11 | CI / CD | Provision Redis 7 service container in GitHub Actions backend-test | Completed |
+| 12 | Tests | Add test_cache_configuration_and_redis_support in DeploymentConfigTests | Completed |
 
 ---
 

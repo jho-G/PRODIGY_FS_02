@@ -1627,6 +1627,16 @@ class DeploymentConfigTests(APITestCase):
         self.assertEqual(settings.DATA_UPLOAD_MAX_MEMORY_SIZE, 15 * 1024 * 1024)
         self.assertEqual(settings.FILE_UPLOAD_MAX_MEMORY_SIZE, 15 * 1024 * 1024)
 
+    def test_cache_configuration_and_redis_support(self):
+        import redis
+        from django.conf import settings
+        from django.core.cache.backends.redis import RedisCache
+
+        self.assertEqual(settings.RATELIMIT_USE_CACHE, "default")
+        self.assertTrue(issubclass(RedisCache, object))
+        self.assertTrue(hasattr(redis, "__version__"))
+        self.assertIn("default", settings.CACHES)
+
 
 # ---------------------------------------------------------------------------
 # Employee Document Permission Tests
