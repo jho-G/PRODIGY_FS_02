@@ -17,6 +17,23 @@
 
 set -euo pipefail
 
+# Help flag
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    echo "Usage: $0"
+    echo ""
+    echo "Generates a timestamped, gzip-compressed PostgreSQL database backup."
+    echo ""
+    echo "Environment Variables:"
+    echo "  BACKUP_DIR        Directory where backups are saved (default: ./backups)"
+    echo "  POSTGRES_HOST     Database host (default: localhost)"
+    echo "  POSTGRES_PORT     Database port (default: 5432)"
+    echo "  POSTGRES_USER     Database user (default: ems_user)"
+    echo "  POSTGRES_PASSWORD Database password (default: ems_secure_password)"
+    echo "  POSTGRES_DB       Database name (default: ems_db)"
+    echo "  BACKUP_KEEP_DAYS  Number of days to keep backups (default: 14)"
+    exit 0
+fi
+
 # Configuration with defaults
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
 POSTGRES_HOST="${POSTGRES_HOST:-localhost}"

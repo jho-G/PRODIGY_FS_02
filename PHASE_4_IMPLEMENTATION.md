@@ -48,6 +48,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 19 | Backup Strategy | Create scripts/backup_db.sh with pg_dump gzip pipeline and SHA-256 checksums | Completed |
 | 20 | Backup Strategy | Implement automated retention pruning of aged backup archives in backup_db.sh | Completed |
 | 21 | Backup Strategy | Create scripts/restore_db.sh with integrity verification and safety checks | Completed |
+| 22 | Backup Strategy | Grant executable permissions and add CLI usage help flags to scripts | Completed |
 
 ---
 
