@@ -217,6 +217,16 @@ CACHES = {
         "LOCATION": REDIS_URL,
     }
 }
+
+# In test runs, fall back to LocMemCache so tests execute hermetically without requiring a live Redis server
+if "test" in sys.argv:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "ems-test-cache",
+        }
+    }
+
 RATELIMIT_USE_CACHE = "default"
 
 # ---------------------------------------------------------------------------
