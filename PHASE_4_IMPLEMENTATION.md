@@ -39,6 +39,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 10 | Django Settings | Add hermetic LocMemCache fallback for test suite execution | Completed |
 | 11 | CI / CD | Provision Redis 7 service container in GitHub Actions backend-test | Completed |
 | 12 | Tests | Add test_cache_configuration_and_redis_support in DeploymentConfigTests | Completed |
+| 13 | Documentation | Document 4.1 Redis configuration semantics and verification outcomes | Completed |
 
 ---
 
@@ -82,4 +83,34 @@ Because `LocMemCache` stores rate-limiting counters inside the private Python pr
 ```
 
 With Redis, all Gunicorn workers query and mutate the identical centralized counter key `rl:login:<client_ip>`. The moment the 6th attempt occurs anywhere across any worker, `django-ratelimit` immediately raises HTTP 429 / blocks the request.
+
+### Configuration & Fallback Semantics
+In `employee_system/settings.py`:
+```python
+REDIS_URL = config("REDIS_URL", default="redis://redis:6379/1")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+    }
+}
+
+# In test runs, fall back to LocMemCache so tests execute hermetically without requiring a live Redis server
+if "test" in sys.argv:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "ems-test-cache",
+        }
+    }
+
+RATELIMIT_USE_CACHE = "default"
+```
+
+### Verification Results
+1. **Ruff Code Standards**: Checked all files; zero formatting or linting errors.
+2. **Hermetic Test Suite**: Executed `manage.py test employees.tests.DeploymentConfigTests` and `SecurityTests`; 100% passed without requiring an active external Redis daemon.
+3. **Continuous Integration**: Configured `redis:7-alpine` container service in `.github/workflows/ci.yml` with health checks (`redis-cli ping`).
+
 
