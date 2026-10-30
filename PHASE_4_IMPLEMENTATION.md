@@ -34,3 +34,48 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 5 | Docker Compose | Configure Redis healthcheck (redis-cli ping) and memory policy | Completed |
 | 6 | Docker Compose | Add persistent redis_data volume for append-only file persistence | Completed |
 | 7 | Docker Compose | Connect backend service to Redis with REDIS_URL and health dependency | Completed |
+| 8 | Architecture | Document Redis container orchestration, persistence, and worker isolation | Completed |
+
+---
+
+## 4.1 Distributed Rate Limiting & Redis Architecture
+
+### Problem Analysis: The Multi-Worker In-Memory Trap
+In a containerized Django deployment with Gunicorn running 3 worker processes:
+```
+Client Request 1 ---> Gunicorn Worker 1 (LocMemCache: 1/5 requests)
+Client Request 2 ---> Gunicorn Worker 2 (LocMemCache: 1/5 requests)
+Client Request 3 ---> Gunicorn Worker 3 (LocMemCache: 1/5 requests)
+Client Request 4 ---> Gunicorn Worker 1 (LocMemCache: 2/5 requests)
+...
+```
+Because `LocMemCache` stores rate-limiting counters inside the private Python process heap of each individual worker, memory is not shared across processes. A malicious client could submit up to **15 login attempts per minute** (3 workers × 5 requests) before being blocked, rather than the intended **5 requests per minute** security policy.
+
+### Solution Architecture: Shared Redis Cache
+```
+                           +---------------------------+
+                           |  Nginx Reverse Proxy:443  |
+                           +-------------+-------------+
+                                         |
+                       +-----------------+-----------------+
+                       |                                   |
+         +-------------v-------------+       +-------------v-------------+
+         | Gunicorn Worker Process 1 |       | Gunicorn Worker Process 2 |
+         +-------------+-------------+       +-------------+-------------+
+                       |                                   |
+                       +-----------------+-----------------+
+                                         |
+                     TCP Socket (REDIS_URL: redis:6379/1)
+                                         |
+                           +-------------v-------------+
+                           |    Redis Cache Service    |
+                           |      (redis:7-alpine)     |
+                           |    - Centralized Counters |
+                           |    - Maxmemory: 256MB     |
+                           |    - Policy: allkeys-lru  |
+                           |    - AppendOnly: yes      |
+                           +---------------------------+
+```
+
+With Redis, all Gunicorn workers query and mutate the identical centralized counter key `rl:login:<client_ip>`. The moment the 6th attempt occurs anywhere across any worker, `django-ratelimit` immediately raises HTTP 429 / blocks the request.
+
