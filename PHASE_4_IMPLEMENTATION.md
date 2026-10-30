@@ -53,6 +53,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 24 | Backup Service | Create scripts/backup_entrypoint.sh for Alpine crond scheduled execution | Completed |
 | 25 | Docker Compose | Add db_backup automated service container with cron scheduler | Completed |
 | 26 | Docker Compose | Add backups_data volume and ignore backup dumps in .gitignore | Completed |
+| 27 | Documentation | Document containerized backup service lifecycle and cloud replication strategy | Completed |
 
 ---
 
@@ -232,6 +233,42 @@ BACKUP_KEEP_DAYS=30 \
 - **Integrity Validation**: Automatically checks the `.sha256` digest if present before proceeding.
 - **Confirmation Barrier**: Requires explicit text confirmation when running interactively.
 - **Atomic Abort on Error**: Runs `psql` with `-v ON_ERROR_STOP=1` so corrupt SQL halts immediately.
+
+### Containerized Automated Cron Service (`ems_db_backup`)
+The `db_backup` container in `docker-compose.yml` runs non-intrusively alongside the application stack:
+```yaml
+db_backup:
+  image: postgres:16-alpine
+  container_name: ems_db_backup
+  restart: unless-stopped
+  environment:
+    BACKUP_SCHEDULE: "0 2 * * *"     # Every day at 02:00 UTC
+    BACKUP_KEEP_DAYS: 14            # Retain two weeks of daily snapshots
+    POSTGRES_HOST: db
+    POSTGRES_DB: ems_db
+  volumes:
+    - backups_data:/backups
+    - ./scripts/backup_db.sh:/usr/local/bin/backup_db.sh:ro
+    - ./scripts/backup_entrypoint.sh:/usr/local/bin/backup_entrypoint.sh:ro
+```
+
+**Lifecycle**:
+1. Waits for `db` PostgreSQL health check to pass (`service_healthy`).
+2. Performs an initial verification backup on boot.
+3. Spawns `crond -f -d 8` in the foreground to manage execution at the designated cron cadence.
+4. Stores compressed archives in the persistent named volume `backups_data`.
+
+### Cloud Storage Replication / Offsite Strategy
+For tier-1 production compliance (3-2-1 backup rule):
+1. **3 Copies**: Primary database, local volume snapshots, and offsite cloud storage.
+2. **2 Media Types**: High-speed NVMe volume and cloud object storage (AWS S3, Google Cloud Storage, or Azure Blob).
+3. **1 Offsite Location**: Encrypted bucket in an independent geographic region with Object Lock / immutability enabled.
+
+Example offsite sync cronjob using AWS CLI / S3:
+```bash
+aws s3 sync /backups/ s3://company-ems-db-backups/production/ --sse AES256
+```
+
 
 
 
