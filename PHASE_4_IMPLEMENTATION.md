@@ -32,3 +32,4 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 3 | Environment | Document REDIS_URL and database backup parameters in .env.example | Completed |
 | 4 | Docker Compose | Add redis:7-alpine service definition to docker-compose.yml | Completed |
 | 5 | Docker Compose | Configure Redis healthcheck (redis-cli ping) and memory policy | Completed |
+| 6 | Docker Compose | Add persistent redis_data volume for append-only file persistence | Completed |
