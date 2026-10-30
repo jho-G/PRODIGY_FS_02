@@ -37,6 +37,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 8 | Architecture | Document Redis container orchestration, persistence, and worker isolation | Completed |
 | 9 | Django Settings | Configure CACHES default backend with django.core.cache.backends.redis.RedisCache | Completed |
 | 10 | Django Settings | Add hermetic LocMemCache fallback for test suite execution | Completed |
+| 11 | CI / CD | Provision Redis 7 service container in GitHub Actions backend-test | Completed |
 
 ---
 
