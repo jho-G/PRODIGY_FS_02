@@ -49,6 +49,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 20 | Backup Strategy | Implement automated retention pruning of aged backup archives in backup_db.sh | Completed |
 | 21 | Backup Strategy | Create scripts/restore_db.sh with integrity verification and safety checks | Completed |
 | 22 | Backup Strategy | Grant executable permissions and add CLI usage help flags to scripts | Completed |
+| 23 | Documentation | Document 4.3 backup pipeline, parameters, checksums, and restore runbook | Completed |
 
 ---
 
@@ -181,6 +182,54 @@ def health_check(request):
 ```
 
 When HTTP 503 is returned, load balancers immediately remove the container from the active pool, preventing users from receiving broken 500 Internal Server Error pages while database connection pools recover.
+
+---
+
+## 4.3 Database Backup Strategy & Disaster Recovery Runbook
+
+### Backup Pipeline Architecture
+The database backup mechanism relies on `pg_dump` piped directly into `gzip` at compression level 9:
+```
+PostgreSQL 16 Engine ---> pg_dump (sql stream) ---> gzip -9 ---> ./backups/ems_backup_<db>_<timestamp>.sql.gz
+                                                                   |
+                                                                   +---> sha256sum verification manifest (.sha256)
+```
+
+### Script Reference
+
+#### 1. Backup Execution (`scripts/backup_db.sh`)
+```bash
+# Run standalone backup with defaults
+./scripts/backup_db.sh
+
+# Run with custom parameters
+BACKUP_DIR=/mnt/secure_backups \
+POSTGRES_HOST=db \
+POSTGRES_DB=ems_db \
+BACKUP_KEEP_DAYS=30 \
+./scripts/backup_db.sh
+```
+
+**Key Features**:
+- **Zero Temporary File Footprint**: Streams output directly through gzip to minimize disk I/O.
+- **Checksum Verification**: Generates a companion `.sha256` checksum for cryptographic verification.
+- **Automated Lifecycle Pruning**: Deletes archives older than `BACKUP_KEEP_DAYS` using POSIX `find ... -mtime +N -delete`.
+
+#### 2. Restoration Execution (`scripts/restore_db.sh`)
+```bash
+# Interactive restore (prompts for confirmation)
+./scripts/restore_db.sh ./backups/ems_backup_ems_db_20261030_120000.sql.gz
+
+# Non-interactive / CI / Disaster recovery automation
+./scripts/restore_db.sh ./backups/ems_backup_ems_db_20261030_120000.sql.gz --yes
+```
+
+**Safety Safeguards**:
+- **Pre-flight Check**: Validates that target archive exists and is non-empty.
+- **Integrity Validation**: Automatically checks the `.sha256` digest if present before proceeding.
+- **Confirmation Barrier**: Requires explicit text confirmation when running interactively.
+- **Atomic Abort on Error**: Runs `psql` with `-v ON_ERROR_STOP=1` so corrupt SQL halts immediately.
+
 
 
 
