@@ -44,6 +44,7 @@ This document tracks the step-by-step implementation, architectural decisions, a
 | 15 | Health Endpoint | Add diagnostic warning logger on database connection probe failures | Completed |
 | 16 | Tests | Update health check tests to validate connected/unavailable status | Completed |
 | 17 | Tests | Add ISO-8601 timestamp payload parsing test in health check suite | Completed |
+| 18 | Documentation | Document 4.2 active DB health check architecture and payload contract | Completed |
 
 ---
 
@@ -116,5 +117,66 @@ RATELIMIT_USE_CACHE = "default"
 1. **Ruff Code Standards**: Checked all files; zero formatting or linting errors.
 2. **Hermetic Test Suite**: Executed `manage.py test employees.tests.DeploymentConfigTests` and `SecurityTests`; 100% passed without requiring an active external Redis daemon.
 3. **Continuous Integration**: Configured `redis:7-alpine` container service in `.github/workflows/ci.yml` with health checks (`redis-cli ping`).
+
+---
+
+## 4.2 Database Connectivity Verification in Health Check
+
+### Problem Analysis: Silent Database Outage Failure Mode
+A common vulnerability in web application deployments is using a static health check endpoint:
+```python
+# Vulnerable static health check
+def health_check(request):
+    return JsonResponse({"status": "healthy"}, status=200)
+```
+If PostgreSQL crashes, restarts, or runs out of available connection slots (`too many clients already`):
+1. The web container continues returning `200 OK` on `/health/`.
+2. Docker Compose, Kubernetes, AWS ALB, or GCP Load Balancer assumes the backend pod is healthy.
+3. Live end-user traffic continues being routed to this broken backend instance, causing widespread HTTP 500 errors across all user requests.
+
+### Solution: Active Connection Verification Probe
+In `employee_system/urls.py`:
+```python
+def health_check(request):
+    try:
+        connection.ensure_connection()
+        db_ok = True
+    except Exception as exc:
+        logger.warning("Database health check probe failed: %s", exc)
+        db_ok = False
+
+    status_code = 200 if db_ok else 503
+    return JsonResponse(
+        {
+            "status": "healthy" if db_ok else "unhealthy",
+            "database": "connected" if db_ok else "unavailable",
+            "timestamp": timezone.now().isoformat(),
+        },
+        status=status_code,
+    )
+```
+
+### Response Payload Contract
+
+#### Healthy State (HTTP 200 OK)
+```json
+{
+  "status": "healthy",
+  "database": "connected",
+  "timestamp": "2026-10-30T10:48:28.936000+00:00"
+}
+```
+
+#### Degraded / Database Down State (HTTP 503 Service Unavailable)
+```json
+{
+  "status": "unhealthy",
+  "database": "unavailable",
+  "timestamp": "2026-10-30T10:48:28.936000+00:00"
+}
+```
+
+When HTTP 503 is returned, load balancers immediately remove the container from the active pool, preventing users from receiving broken 500 Internal Server Error pages while database connection pools recover.
+
 
 
