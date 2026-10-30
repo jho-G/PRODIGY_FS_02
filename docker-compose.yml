@@ -60,6 +60,7 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/1}
     healthcheck:
       # Use the dedicated /health/ endpoint — fast, no DB query
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
@@ -69,6 +70,8 @@ services:
       start_period: 20s
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - ems_network
