@@ -15,22 +15,21 @@ from django.utils import timezone
 def health_check(request):
     """
     Health-check endpoint for Docker/load-balancer liveness and readiness probes.
-    Verifies database connectivity to ensure the backend can process requests.
-    Returns 200 OK if healthy, or 503 Service Unavailable if database is unreachable.
+    Actively verifies database connectivity via connection.ensure_connection().
+    Returns HTTP 200 with database: connected when healthy, or HTTP 503 with
+    database: unavailable when the database is unreachable.
     """
-    db_status = "ok"
-    status_code = 200
     try:
         connection.ensure_connection()
-    except Exception as exc:
-        db_status = f"unhealthy: {exc.__class__.__name__}"
-        status_code = 503
+        db_ok = True
+    except Exception:
+        db_ok = False
 
+    status_code = 200 if db_ok else 503
     return JsonResponse(
         {
-            "status": "healthy" if status_code == 200 else "degraded",
-            "service": "Employee Management System API",
-            "database": db_status,
+            "status": "healthy" if db_ok else "unhealthy",
+            "database": "connected" if db_ok else "unavailable",
             "timestamp": timezone.now().isoformat(),
         },
         status=status_code,
