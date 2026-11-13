@@ -226,29 +226,29 @@ export default function EmployeeDetailModal({ employee, onClose }) {
 
           {activeTab === 'profile' ? (
             <>
-              {/* Compensation highlight */}
+              {/* Compensation highlight - Monochrome */}
               <div className="detail-payroll-grid">
                 <div className="detail-pay-card">
-                  <Wallet size={18} color="var(--primary)" />
+                  <Wallet size={18} color="#000000" />
                   <span className="detail-pay-label">Monthly Salary</span>
                   <span className="detail-pay-value">
                     ${monthly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="detail-pay-card">
-                  <Wallet size={18} color="var(--accent)" />
+                  <Wallet size={18} color="#000000" />
                   <span className="detail-pay-label">Annual Salary</span>
                   <span className="detail-pay-value">
                     ${annual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="detail-pay-card">
-                  <Award size={18} color="var(--warning)" />
+                  <Award size={18} color="#000000" />
                   <span className="detail-pay-label">Total Experience</span>
                   <span className="detail-pay-value">{employee.effective_experience_years ?? 0} years</span>
                 </div>
                 <div className="detail-pay-card">
-                  <CalendarDays size={18} color="var(--success)" />
+                  <CalendarDays size={18} color="#000000" />
                   <span className="detail-pay-label">Years at Company</span>
                   <span className="detail-pay-value">{employee.years_of_service ?? 0} years</span>
                 </div>
