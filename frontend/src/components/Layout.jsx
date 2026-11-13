@@ -225,10 +225,11 @@ export default function Layout() {
                       style={{
                         background: 'none',
                         border: 'none',
-                        color: 'var(--primary)',
+                        color: '#000000',
                         fontSize: '0.76rem',
-                        fontWeight: '600',
+                        fontWeight: '700',
                         cursor: 'pointer',
+                        textDecoration: 'underline',
                       }}
                     >
                       Mark all read
@@ -238,7 +239,7 @@ export default function Layout() {
 
                 <div className="notification-list">
                   {notifications.length === 0 ? (
-                    <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#71717a', fontSize: '0.84rem' }}>
                       No notifications at this time.
                     </div>
                   ) : (
@@ -273,12 +274,12 @@ export default function Layout() {
 
           <button
             onClick={handleLogout}
-            className="btn btn-danger-light btn-sm"
+            className="btn btn-secondary btn-sm"
             disabled={loggingOut}
             title="Sign out of system"
           >
             {loggingOut ? (
-              <span className="spinner" style={{ width: '14px', height: '14px', borderColor: '#ef4444' }} />
+              <span className="spinner-dark" style={{ width: '14px', height: '14px' }} />
             ) : (
               <LogOut size={15} />
             )}
