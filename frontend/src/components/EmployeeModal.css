@@ -19,5 +19,11 @@
   margin-top: 14px;
   margin-bottom: 8px;
   padding-bottom: 4px;
-  border-bottom: 1px solid #18181b;
+  border-bottom: 2px solid #000000;
+}
+
+.employee-form-hint {
+  font-size: 0.76rem;
+  color: #71717a;
+  margin-top: 2px;
 }
