@@ -1,32 +1,32 @@
 :root {
-  /* Color Palette */
-  --primary: #4f46e5;
-  --primary-hover: #4338ca;
-  --primary-focus: rgba(79, 70, 229, 0.25);
-  --primary-light: #eef2ff;
+  /* Monochrome Design Tokens - Black and White Theme */
+  --primary: #000000;
+  --primary-hover: #27272a;
+  --primary-focus: rgba(0, 0, 0, 0.2);
+  --primary-light: #f4f4f5;
 
-  --accent: #06b6d4;
-  --accent-light: #ecfeff;
+  --accent: #18181b;
+  --accent-light: #f4f4f5;
 
-  --bg-page: #f8fafc;
+  --bg-page: #fafafa;
   --bg-card: #ffffff;
   --bg-input: #ffffff;
-  --border-color: #e2e8f0;
-  --border-focus: #4f46e5;
+  --border-color: #e4e4e7;
+  --border-focus: #000000;
 
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
+  --text-primary: #09090b;
+  --text-secondary: #52525b;
+  --text-muted: #71717a;
   --text-inverse: #ffffff;
 
-  --success: #10b981;
-  --success-light: #ecfdf5;
-  --danger: #ef4444;
-  --danger-light: #fef2f2;
-  --warning: #f59e0b;
-  --warning-light: #fffbeb;
-  --info: #3b82f6;
-  --info-light: #eff6ff;
+  --success: #18181b;
+  --success-light: #f4f4f5;
+  --danger: #09090b;
+  --danger-light: #f4f4f5;
+  --warning: #27272a;
+  --warning-light: #f4f4f5;
+  --info: #3f3f46;
+  --info-light: #f4f4f5;
 
   /* Elevation Shadows */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
