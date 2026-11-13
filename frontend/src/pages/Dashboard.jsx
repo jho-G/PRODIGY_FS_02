@@ -49,10 +49,10 @@ export default function Dashboard() {
 
   const totalActive = stats?.active_employees || 0;
   const statusLabels = {
-    FT: { label: 'Full-time', color: 'var(--primary)', bg: 'var(--primary-light)' },
-    PT: { label: 'Part-time', color: 'var(--accent)', bg: 'var(--accent-light)' },
-    CT: { label: 'Contract', color: 'var(--warning)', bg: 'var(--warning-light)' },
-    IN: { label: 'Internship', color: 'var(--success)', bg: 'var(--success-light)' },
+    FT: { label: 'Full-time', color: '#ffffff', bg: '#000000' },
+    PT: { label: 'Part-time', color: '#000000', bg: '#f4f4f5' },
+    CT: { label: 'Contract', color: '#18181b', bg: '#e4e4e7' },
+    IN: { label: 'Internship', color: '#52525b', bg: '#fafafa' },
   };
 
   return (
@@ -66,11 +66,11 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="hero-actions">
-          <Link to="/employees" className="btn btn-primary" style={{ backgroundColor: '#ffffff', color: 'var(--primary)' }}>
+          <Link to="/employees" className="btn" style={{ backgroundColor: '#ffffff', color: '#000000', border: '1px solid #ffffff' }}>
             <Users size={16} />
             <span>Manage Employees</span>
           </Link>
-          <Link to="/departments" className="btn btn-secondary" style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#ffffff', borderColor: 'rgba(255,255,255,0.3)' }}>
+          <Link to="/departments" className="btn btn-outline" style={{ backgroundColor: 'transparent', color: '#ffffff', borderColor: '#ffffff' }}>
             <Building2 size={16} />
             <span>Departments</span>
           </Link>
@@ -81,7 +81,7 @@ export default function Dashboard() {
       {error && (
         <div className="alert-error" style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderRadius: 'var(--radius-md)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <AlertTriangle size={20} color="var(--danger)" />
+            <AlertTriangle size={20} color="#000000" />
             <span>{error}</span>
           </div>
           <button
@@ -98,7 +98,7 @@ export default function Dashboard() {
       {/* Top Metric Cards */}
       <section className="metrics-row">
         <div className="metric-card">
-          <div className="metric-icon-box" style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary)' }}>
+          <div className="metric-icon-box" style={{ backgroundColor: '#000000', color: '#ffffff' }}>
             <Users size={26} />
           </div>
           <div className="metric-data">
@@ -108,7 +108,7 @@ export default function Dashboard() {
         </div>
 
         <div className="metric-card">
-          <div className="metric-icon-box" style={{ backgroundColor: 'var(--success-light)', color: 'var(--success)' }}>
+          <div className="metric-icon-box" style={{ backgroundColor: '#18181b', color: '#ffffff' }}>
             <UserCheck size={26} />
           </div>
           <div className="metric-data">
@@ -118,7 +118,7 @@ export default function Dashboard() {
         </div>
 
         <div className="metric-card">
-          <div className="metric-icon-box" style={{ backgroundColor: 'var(--danger-light)', color: 'var(--danger)' }}>
+          <div className="metric-icon-box" style={{ backgroundColor: '#f4f4f5', color: '#000000', border: '1px solid #e4e4e7' }}>
             <UserX size={26} />
           </div>
           <div className="metric-data">
@@ -128,7 +128,7 @@ export default function Dashboard() {
         </div>
 
         <div className="metric-card">
-          <div className="metric-icon-box" style={{ backgroundColor: 'var(--accent-light)', color: 'var(--accent)' }}>
+          <div className="metric-icon-box" style={{ backgroundColor: '#27272a', color: '#ffffff' }}>
             <Building2 size={26} />
           </div>
           <div className="metric-data">
@@ -144,7 +144,7 @@ export default function Dashboard() {
         <div className="breakdown-card">
           <div className="breakdown-card-header">
             <h2 className="breakdown-title">
-              <BarChart3 size={20} color="var(--primary)" />
+              <BarChart3 size={20} color="#000000" />
               <span>Department Distribution</span>
             </h2>
             <Link to="/departments" className="btn btn-secondary btn-sm">
@@ -188,7 +188,7 @@ export default function Dashboard() {
         <div className="breakdown-card">
           <div className="breakdown-card-header">
             <h2 className="breakdown-title">
-              <PieChart size={20} color="var(--accent)" />
+              <PieChart size={20} color="#000000" />
               <span>Employment Status</span>
             </h2>
             <Link to="/employees" className="btn btn-secondary btn-sm">
@@ -210,11 +210,11 @@ export default function Dashboard() {
                     <div className="status-stat-header">
                       <span
                         className="status-tag"
-                        style={{ backgroundColor: meta.bg, color: meta.color }}
+                        style={{ backgroundColor: meta.bg, color: meta.color, border: '1px solid #18181b' }}
                       >
                         {code}
                       </span>
-                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      <span style={{ fontSize: '0.78rem', color: '#71717a' }}>
                         {percentage}%
                       </span>
                     </div>
@@ -231,7 +231,7 @@ export default function Dashboard() {
         <div className="breakdown-card" style={{ gridColumn: 'span 2' }}>
           <div className="breakdown-card-header">
             <h2 className="breakdown-title">
-              <Calendar size={20} color="var(--success)" />
+              <Calendar size={20} color="#000000" />
               <span>Upcoming Company Holidays</span>
             </h2>
             <Link to="/leave" className="btn btn-secondary btn-sm">
@@ -250,21 +250,21 @@ export default function Dashboard() {
                   style={{
                     padding: '14px 16px',
                     borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-page)',
+                    border: '1px solid #e4e4e7',
+                    backgroundColor: '#fafafa',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '4px',
                   }}
                 >
-                  <span style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--primary)' }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#000000' }}>
                     {new Date(h.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>
-                  <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
+                  <span style={{ fontWeight: '600', color: '#000000', fontSize: '0.95rem' }}>
                     {h.name}
                   </span>
                   {h.description && (
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#71717a' }}>
                       {h.description}
                     </span>
                   )}
