@@ -244,12 +244,39 @@ p {
 }
 
 .table-responsive::-webkit-scrollbar-track {
-  background: var(--bg-page);
+  background: #fafafa;
 }
 
 .table-responsive::-webkit-scrollbar-thumb {
-  background: var(--border-color);
+  background: #d4d4d8;
   border-radius: var(--radius-full);
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
+}
+
+/* Global Monochrome Table Helpers */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  font-weight: 600;
+  color: #000000;
+  background-color: #fafafa;
+  border-bottom: 2px solid #18181b;
+}
+
+td {
+  border-bottom: 1px solid #e4e4e7;
+  color: #09090b;
+}
+
+tr:hover td {
+  background-color: #f4f4f5;
 }
 
 /* Form Controls - Monochrome Black and White */
