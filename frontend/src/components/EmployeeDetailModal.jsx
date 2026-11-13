@@ -53,6 +53,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
   const [uploadFile, setUploadFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [docError, setDocError] = useState('');
+  const [downloadingDocId, setDownloadingDocId] = useState(null);
 
   useEffect(() => {
     if (!employee) return;
@@ -138,6 +139,23 @@ export default function EmployeeDetailModal({ employee, onClose }) {
     }
   };
 
+  const handleViewDocument = async (doc) => {
+    try {
+      setDownloadingDocId(doc.id);
+      const response = await documentApi.download(doc.id);
+      const contentType = response.headers?.['content-type'] || 'application/octet-stream';
+      const blob = new Blob([response.data], { type: contentType });
+      const blobUrl = window.URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
+    } catch (err) {
+      console.error('Failed to view document:', err);
+      alert('Unable to load document. Please try again.');
+    } finally {
+      setDownloadingDocId(null);
+    }
+  };
+
   if (!employee) return null;
 
   const initials = `${employee.first_name?.[0] || ''}${employee.last_name?.[0] || ''}`;
@@ -208,29 +226,29 @@ export default function EmployeeDetailModal({ employee, onClose }) {
 
           {activeTab === 'profile' ? (
             <>
-              {/* Compensation highlight */}
+              {/* Compensation highlight - Monochrome */}
               <div className="detail-payroll-grid">
                 <div className="detail-pay-card">
-                  <Wallet size={18} color="var(--primary)" />
+                  <Wallet size={18} color="#000000" />
                   <span className="detail-pay-label">Monthly Salary</span>
                   <span className="detail-pay-value">
                     ${monthly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="detail-pay-card">
-                  <Wallet size={18} color="var(--accent)" />
+                  <Wallet size={18} color="#000000" />
                   <span className="detail-pay-label">Annual Salary</span>
                   <span className="detail-pay-value">
                     ${annual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="detail-pay-card">
-                  <Award size={18} color="var(--warning)" />
+                  <Award size={18} color="#000000" />
                   <span className="detail-pay-label">Total Experience</span>
                   <span className="detail-pay-value">{employee.effective_experience_years ?? 0} years</span>
                 </div>
                 <div className="detail-pay-card">
-                  <CalendarDays size={18} color="var(--success)" />
+                  <CalendarDays size={18} color="#000000" />
                   <span className="detail-pay-label">Years at Company</span>
                   <span className="detail-pay-value">{employee.years_of_service ?? 0} years</span>
                 </div>
@@ -399,19 +417,17 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                         </div>
                       </div>
                       <div className="document-actions">
-                        {doc.file_url && (
-                          <a
-                            href={doc.file_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-secondary btn-sm"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 8px' }}
-                            title="Open document"
-                          >
-                            <ExternalLink size={13} />
-                            <span>View</span>
-                          </a>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleViewDocument(doc)}
+                          disabled={downloadingDocId === doc.id}
+                          className="btn btn-secondary btn-sm"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '4px 8px' }}
+                          title="Open document"
+                        >
+                          <ExternalLink size={13} />
+                          <span>{downloadingDocId === doc.id ? 'Loading...' : 'View'}</span>
+                        </button>
                         {isHR && (
                           <button
                             type="button"

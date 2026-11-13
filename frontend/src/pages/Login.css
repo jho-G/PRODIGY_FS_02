@@ -4,16 +4,16 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: radial-gradient(circle at top left, #eef2ff, #f8fafc 40%, #f1f5f9);
+  background: radial-gradient(circle at top left, #ffffff, #fafafa 45%, #f4f4f5);
 }
 
 .login-card {
   width: 100%;
   max-width: 440px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
+  background: #ffffff;
+  border: 1px solid #18181b;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.12);
   padding: 40px 36px;
   display: flex;
   flex-direction: column;
@@ -28,7 +28,7 @@
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, #4f46e5, #06b6d4);
+  background: #000000;
 }
 
 .login-header {
@@ -40,13 +40,13 @@
   width: 54px;
   height: 54px;
   margin: 0 auto 16px;
-  background: var(--primary-light);
-  color: var(--primary);
+  background: #000000;
+  color: #ffffff;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .login-title {
@@ -131,18 +131,21 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  background-color: var(--primary);
+  background-color: #000000;
   color: #ffffff;
+  border: 1px solid #000000;
   font-weight: 600;
   padding: 13px 20px;
   border-radius: var(--radius-md);
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
   margin-top: 8px;
-  transition: background-color 0.2s ease, transform 0.1s ease;
+  transition: all 0.2s ease;
+  cursor: pointer;
 }
 
 .login-btn:hover:not(:disabled) {
-  background-color: var(--primary-hover);
+  background-color: #27272a;
+  border-color: #27272a;
   transform: translateY(-1px);
 }
 
@@ -155,9 +158,9 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  background-color: var(--danger-light);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  color: var(--danger);
+  background-color: #fafafa;
+  border: 1px solid #000000;
+  color: #000000;
   padding: 12px 14px;
   border-radius: var(--radius-md);
   font-size: 0.88rem;

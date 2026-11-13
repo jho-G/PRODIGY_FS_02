@@ -278,7 +278,7 @@ export default function Departments() {
 
               <div className="dept-card-footer">
                 <div className="dept-headcount-badge">
-                  <Users size={16} color="var(--primary)" />
+                  <Users size={16} color="#000000" />
                   <span>
                     {dept.employee_count ?? 0} active{' '}
                     {dept.employee_count === 1 ? 'employee' : 'employees'}

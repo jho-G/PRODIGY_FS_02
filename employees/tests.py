@@ -20,10 +20,13 @@ Tests are organized by concern:
   IntegrationTests           — End-to-end request→model→response flows
 """
 
+import shutil
+import tempfile
 from datetime import date, time, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -1293,6 +1296,30 @@ class SecurityTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_get_client_ip_prioritizes_real_ip_and_handles_forwarded_for(self):
+        from unittest.mock import MagicMock
+
+        from employees.views import get_client_ip
+
+        req = MagicMock()
+        req.META = {
+            "HTTP_X_REAL_IP": "203.0.113.195",
+            "HTTP_X_FORWARDED_FOR": "198.51.100.1, 203.0.113.195",
+            "REMOTE_ADDR": "127.0.0.1",
+        }
+        self.assertEqual(get_client_ip("login", req), "203.0.113.195")
+
+        # When X-Real-IP is absent, last entry of X-Forwarded-For is returned (untrusted proxy hop)
+        req.META = {
+            "HTTP_X_FORWARDED_FOR": "spoofed.ip.1.1, 198.51.100.42",
+            "REMOTE_ADDR": "127.0.0.1",
+        }
+        self.assertEqual(get_client_ip("login", req), "198.51.100.42")
+
+        # Fallback to REMOTE_ADDR
+        req.META = {"REMOTE_ADDR": "192.0.2.1"}
+        self.assertEqual(get_client_ip("login", req), "192.0.2.1")
+
 
 # ---------------------------------------------------------------------------
 # Serializer Validation Tests
@@ -1579,6 +1606,33 @@ class DeploymentConfigTests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["status"], "healthy")
+        self.assertEqual(response.json()["database"], "connected")
+
+    def test_health_check_database_unhealthy(self):
+        from django.db import OperationalError
+        from django.urls import reverse
+
+        with patch(
+            "django.db.connection.ensure_connection",
+            side_effect=OperationalError("Connection failed"),
+        ):
+            response = self.client.get(reverse("health_check"))
+            self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+            self.assertEqual(response.json()["status"], "unhealthy")
+            self.assertEqual(response.json()["database"], "unavailable")
+
+    def test_health_check_payload_timestamp_format(self):
+        from datetime import datetime
+
+        from django.urls import reverse
+
+        response = self.client.get(reverse("health_check"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ts_str = response.json().get("timestamp")
+        self.assertIsNotNone(ts_str)
+        # Verify timestamp can be parsed as a valid ISO datetime
+        parsed = datetime.fromisoformat(ts_str)
+        self.assertIsNotNone(parsed)
 
     def test_upload_memory_limits_configured(self):
         from django.conf import settings
@@ -1586,13 +1640,66 @@ class DeploymentConfigTests(APITestCase):
         self.assertEqual(settings.DATA_UPLOAD_MAX_MEMORY_SIZE, 15 * 1024 * 1024)
         self.assertEqual(settings.FILE_UPLOAD_MAX_MEMORY_SIZE, 15 * 1024 * 1024)
 
+    def test_cache_configuration_and_redis_support(self):
+        import redis
+        from django.conf import settings
+        from django.core.cache.backends.redis import RedisCache
+
+        self.assertEqual(settings.RATELIMIT_USE_CACHE, "default")
+        self.assertTrue(issubclass(RedisCache, object))
+        self.assertTrue(hasattr(redis, "__version__"))
+        self.assertIn("default", settings.CACHES)
+
+    def test_backup_and_restore_scripts_exist_and_executable(self):
+        import os
+
+        from django.conf import settings
+
+        scripts = [
+            settings.BASE_DIR / "scripts" / "backup_db.sh",
+            settings.BASE_DIR / "scripts" / "restore_db.sh",
+            settings.BASE_DIR / "scripts" / "backup_entrypoint.sh",
+        ]
+        for script_path in scripts:
+            self.assertTrue(script_path.exists(), f"Missing script: {script_path}")
+            self.assertTrue(
+                os.access(script_path, os.X_OK),
+                f"Script is not executable: {script_path}",
+            )
+            content = script_path.read_text()
+            self.assertTrue(content.startswith("#!"))
+
+    def test_backup_and_restore_scripts_cli_help(self):
+        import subprocess
+
+        from django.conf import settings
+
+        for script_name in ["backup_db.sh", "restore_db.sh"]:
+            script_path = str(settings.BASE_DIR / "scripts" / script_name)
+            res = subprocess.run(
+                [script_path, "--help"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            self.assertEqual(res.returncode, 0)
+            self.assertIn("Usage:", res.stdout)
+
 
 # ---------------------------------------------------------------------------
 # Employee Document Permission Tests
 # ---------------------------------------------------------------------------
 
+_TEMP_MEDIA_ROOT = tempfile.mkdtemp()
 
+
+@override_settings(MEDIA_ROOT=_TEMP_MEDIA_ROOT)
 class EmployeeDocumentPermissionTests(APITestCase):
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(_TEMP_MEDIA_ROOT, ignore_errors=True)
+
     def setUp(self):
         self.hr_user = _user_with_role("hr_doc_officer", "HR")
         self.emp1 = Employee.objects.create(
@@ -1662,6 +1769,36 @@ class EmployeeDocumentPermissionTests(APITestCase):
         delete_resp = self.client.delete(f"/api/documents/{self.doc1.id}/")
         self.assertEqual(delete_resp.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(EmployeeDocument.objects.filter(id=self.doc1.id).exists())
+
+    def test_employee_can_download_own_document_with_security_headers(self):
+        from django.core.files.base import ContentFile
+
+        self.doc1.file.save(
+            "contract.pdf", ContentFile(b"%PDF-1.4 test contract content")
+        )
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get(f"/api/documents/{self.doc1.id}/download/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.headers.get("X-Content-Type-Options"), "nosniff")
+        self.assertIn("inline", response.headers.get("Content-Disposition", ""))
+
+    def test_employee_cannot_download_other_employee_document(self):
+        from django.core.files.base import ContentFile
+
+        self.doc2.file.save("passport.pdf", ContentFile(b"%PDF-1.4 sensitive passport"))
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get(f"/api/documents/{self.doc2.id}/download/")
+        self.assertIn(
+            response.status_code, [status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN]
+        )
+
+    def test_unauthenticated_cannot_download_document(self):
+        from django.core.files.base import ContentFile
+
+        self.doc1.file.save("contract.pdf", ContentFile(b"%PDF-1.4 sample content"))
+        self.client.logout()
+        response = self.client.get(f"/api/documents/{self.doc1.id}/download/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 class PayslipPermissionTests(APITestCase):

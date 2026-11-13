@@ -15,9 +15,9 @@
 }
 
 .action-icon-btn.btn-approve:hover {
-  color: var(--success);
-  border-color: var(--success);
-  background-color: var(--success-light);
+  color: #ffffff;
+  border-color: #000000;
+  background-color: #000000;
 }
 
 .form-row {
