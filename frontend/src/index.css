@@ -76,7 +76,7 @@ p {
   color: var(--text-secondary);
 }
 
-/* Button Component System */
+/* Button Component System - Monochrome Black & White */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -97,53 +97,72 @@ p {
 }
 
 .btn-primary {
-  background-color: var(--primary);
+  background-color: #000000;
   color: #ffffff;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+  border: 1px solid #000000;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background-color: var(--primary-hover);
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);
+  background-color: #27272a;
+  border-color: #27272a;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .btn-secondary {
-  background-color: var(--bg-card);
-  color: var(--text-secondary);
-  border-color: var(--border-color);
+  background-color: #ffffff;
+  color: #09090b;
+  border: 1px solid #e4e4e7;
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background-color: var(--bg-page);
-  color: var(--text-primary);
-  border-color: #cbd5e1;
+  background-color: #f4f4f5;
+  color: #000000;
+  border-color: #a1a1aa;
 }
 
 .btn-danger {
-  background-color: var(--danger);
+  background-color: #18181b;
   color: #ffffff;
+  border: 1px solid #18181b;
 }
 
 .btn-danger:hover:not(:disabled) {
-  background-color: #dc2626;
+  background-color: #000000;
+  border-color: #000000;
 }
 
 .btn-danger-light {
-  background-color: var(--danger-light);
-  color: var(--danger);
+  background-color: #f4f4f5;
+  color: #09090b;
+  border: 1px solid #e4e4e7;
 }
 
 .btn-danger-light:hover:not(:disabled) {
-  background-color: #fee2e2;
+  background-color: #e4e4e7;
+  color: #000000;
 }
 
 .btn-success-light {
-  background-color: var(--success-light);
-  color: var(--success);
+  background-color: #f4f4f5;
+  color: #09090b;
+  border: 1px solid #e4e4e7;
 }
 
 .btn-success-light:hover:not(:disabled) {
-  background-color: #d1fae5;
+  background-color: #e4e4e7;
+  color: #000000;
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: #000000;
+  border: 1px solid #000000;
+}
+
+.btn-outline:hover:not(:disabled) {
+  background-color: #000000;
+  color: #ffffff;
 }
 
 .btn-sm {
