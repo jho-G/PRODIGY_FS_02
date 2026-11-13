@@ -10,10 +10,10 @@
 .login-card {
   width: 100%;
   max-width: 440px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
+  background: #ffffff;
+  border: 1px solid #18181b;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.12);
   padding: 40px 36px;
   display: flex;
   flex-direction: column;
@@ -28,7 +28,7 @@
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, #4f46e5, #06b6d4);
+  background: #000000;
 }
 
 .login-header {
