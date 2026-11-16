@@ -2366,3 +2366,27 @@ class ManagementCommandTests(APITestCase):
         self.assertIn("System check identified no issues (0 silenced)", out.getvalue())
 
 
+class InfrastructureScriptTests(APITestCase):
+    """Assertions to verify infrastructure backup, restore, and SSL scripts integrity."""
+
+    def test_backup_script_contains_offsite_sync_hook(self):
+        with open("scripts/backup_db.sh", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("BACKUP_OFFSITE_CMD", content)
+        self.assertIn("Executing offsite cloud replication hook", content)
+
+    def test_restore_script_contains_preflight_checks(self):
+        with open("scripts/restore_db.sh", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("pg_isready", content)
+        self.assertIn("USER_CONFIRM", content)
+
+    def test_generate_ssl_script_contains_permission_hardening(self):
+        with open("generate-ssl.sh", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("chmod 600", content)
+        self.assertIn("chmod 644", content)
+        self.assertIn("DOMAIN=", content)
+
+
+
