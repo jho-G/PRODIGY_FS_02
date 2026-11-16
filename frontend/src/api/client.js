@@ -159,4 +159,36 @@ api.interceptors.response.use(
   }
 );
 
+/**
+ * Extract a user-friendly, sanitized error message from an Axios error,
+ * preventing raw backend stack traces or internal errors from leaking.
+ * @param {Error|Object} error
+ * @returns {string} Safe error message suitable for UI display
+ */
+export function getSanitizedErrorMessage(error) {
+  if (!error) return 'An unexpected error occurred.';
+  if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+    return 'The server took too long to respond. Please check your connection and try again.';
+  }
+  if (!error.response) {
+    return 'Unable to connect to the server. Please check your network connection.';
+  }
+  const status = error.response.status;
+  if (status >= 500) {
+    return 'A server error occurred. Please try again later or contact IT support.';
+  }
+  const data = error.response.data;
+  if (data) {
+    if (typeof data === 'string') return data;
+    if (data.detail) return data.detail;
+    if (data.message) return data.message;
+    if (data.error) return data.error;
+    const firstKey = Object.keys(data)[0];
+    if (firstKey && Array.isArray(data[firstKey])) {
+      return `${firstKey}: ${data[firstKey][0]}`;
+    }
+  }
+  return error.message || 'An unexpected error occurred.';
+}
+
 export default api;
