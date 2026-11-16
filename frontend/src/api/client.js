@@ -7,7 +7,13 @@ import axios from 'axios';
  * @returns {string} Sanitized base URL ending with exactly one slash
  */
 export function sanitizeApiBaseUrl(url) {
-  if (!url || typeof url !== 'string') {
+  if (!url || typeof url !== 'string' || url.trim() === '') {
+    // In production environments behind reverse proxy, default to same-origin /api/
+    if (typeof window !== 'undefined' && window.location && window.location.origin) {
+      if (import.meta?.env?.PROD) {
+        return `${window.location.origin}/api/`;
+      }
+    }
     return 'http://127.0.0.1:8000/api/';
   }
   const trimmed = url.trim();
