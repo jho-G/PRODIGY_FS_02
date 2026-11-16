@@ -2295,3 +2295,52 @@ class AttendancePunchTests(APITestCase):
         resp2 = self.client.post("/api/attendance/check_out/")
         self.assertEqual(resp2.status_code, status.HTTP_200_OK)
         self.assertIsNotNone(resp2.data["check_out"])
+
+
+class ManagementCommandTests(APITestCase):
+    """Unit tests for verify_deployment and purge_test_data management commands."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser("admin_test", "admin@test.com", "pass12345")
+        self.dept = Department.objects.create(name="QA Testing", description="QA")
+        self.emp = _make_employee("EMP-CMD-001", department=self.dept)
+
+    def test_verify_deployment_command_execution(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("verify_deployment", stdout=out)
+        output = out.getvalue()
+        self.assertIn("Pre-flight Production Deployment Verification", output)
+        self.assertIn("Administrative access verified", output)
+
+    def test_purge_test_data_dry_run_preserves_records(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("purge_test_data", dry_run=True, stdout=out)
+        self.assertEqual(Employee.objects.count(), 1)
+        self.assertIn("[DRY RUN] No records were deleted.", out.getvalue())
+
+    def test_purge_test_data_requires_confirm_or_dry_run(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("purge_test_data")
+
+    def test_purge_test_data_confirmed_deletion(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("purge_test_data", confirm=True, stdout=out)
+        self.assertEqual(Employee.objects.count(), 0)
+        self.assertEqual(Department.objects.count(), 1)
+        self.assertIn("Successfully purged test records", out.getvalue())
+
