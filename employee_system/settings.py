@@ -302,8 +302,13 @@ CSRF_TRUSTED_ORIGINS = config(
 # ---------------------------------------------------------------------------
 # Security Headers (hardened in production)
 # ---------------------------------------------------------------------------
-# Trust X-Forwarded-Proto header from Nginx reverse proxy
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# Trust X-Forwarded-Proto and port headers from Nginx reverse proxy
+_PROXY_SSL_HEADER_CONFIG = config("SECURE_PROXY_SSL_HEADER", default="HTTP_X_FORWARDED_PROTO,https", cast=Csv())
+if len(_PROXY_SSL_HEADER_CONFIG) == 2:
+    SECURE_PROXY_SSL_HEADER = (_PROXY_SSL_HEADER_CONFIG[0], _PROXY_SSL_HEADER_CONFIG[1])
+else:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_PORT = config("USE_X_FORWARDED_PORT", default=True, cast=bool)
 
 # Redirect all HTTP to HTTPS in production
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool)
