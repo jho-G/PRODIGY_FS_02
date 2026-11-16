@@ -355,10 +355,9 @@ SECURE_BROWSER_XSS_FILTER = True
 # Prevent the site from being embedded in iframes (clickjacking)
 X_FRAME_OPTIONS = "DENY"
 
-# Content-Security-Policy header (handled via nginx in production;
-# this is a fallback for direct Django responses)
-# In production, tune this to your actual CDN/asset domains
-SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+# Referrer policy and cross-origin isolation
+SECURE_REFERRER_POLICY = config("SECURE_REFERRER_POLICY", default="strict-origin-when-cross-origin")
+SECURE_CROSS_ORIGIN_OPENER_POLICY = config("SECURE_CROSS_ORIGIN_OPENER_POLICY", default="same-origin-allow-popups")
 
 # ---------------------------------------------------------------------------
 # Structured Logging
