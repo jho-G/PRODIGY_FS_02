@@ -325,9 +325,13 @@ CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = "Lax"
 
 # HTTP Strict Transport Security — browsers will only use HTTPS for 1 year
-SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
-SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
-SECURE_HSTS_PRELOAD = not DEBUG
+SECURE_HSTS_SECONDS = config(
+    "SECURE_HSTS_SECONDS", default=31536000 if not DEBUG else 0, cast=int
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config(
+    "SECURE_HSTS_INCLUDE_SUBDOMAINS", default=not DEBUG, cast=bool
+)
+SECURE_HSTS_PRELOAD = config("SECURE_HSTS_PRELOAD", default=not DEBUG, cast=bool)
 
 # Prevent browsers from MIME-sniffing responses
 SECURE_CONTENT_TYPE_NOSNIFF = True
