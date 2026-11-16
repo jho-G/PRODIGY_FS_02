@@ -13,6 +13,9 @@ A robust, enterprise-grade full-stack Employee Management System built with **Dj
 
 > 📘 **Looking for comprehensive technical design docs?**  
 > Check out the exhaustive [PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md) covering database schema, ER diagrams, token refresh queue mechanics, and deployment architecture.
+>
+> 🚀 **Preparing for Client Delivery or Production Rollout?**  
+> Follow the step-by-step [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) covering environment hardening, pre-flight audits, SSL setup, and backup scheduling.
 
 ---
 
