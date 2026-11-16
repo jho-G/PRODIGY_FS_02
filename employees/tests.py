@@ -2295,3 +2295,97 @@ class AttendancePunchTests(APITestCase):
         resp2 = self.client.post("/api/attendance/check_out/")
         self.assertEqual(resp2.status_code, status.HTTP_200_OK)
         self.assertIsNotNone(resp2.data["check_out"])
+
+
+class ManagementCommandTests(APITestCase):
+    """Unit tests for verify_deployment and purge_test_data management commands."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            "admin_test", "admin@test.com", "pass12345"
+        )
+        self.dept = Department.objects.create(name="QA Testing", description="QA")
+        self.emp = _make_employee("EMP-CMD-001", department=self.dept)
+
+    def test_verify_deployment_command_execution(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("verify_deployment", stdout=out)
+        output = out.getvalue()
+        self.assertIn("Pre-flight Production Deployment Verification", output)
+        self.assertIn("Administrative access verified", output)
+
+    def test_purge_test_data_dry_run_preserves_records(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("purge_test_data", dry_run=True, stdout=out)
+        self.assertEqual(Employee.objects.count(), 1)
+        self.assertIn("[DRY RUN] No records were deleted.", out.getvalue())
+
+    def test_purge_test_data_requires_confirm_or_dry_run(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("purge_test_data")
+
+    def test_purge_test_data_confirmed_deletion(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("purge_test_data", confirm=True, stdout=out)
+        self.assertEqual(Employee.objects.count(), 0)
+        self.assertEqual(Department.objects.count(), 1)
+        self.assertIn("Successfully purged test records", out.getvalue())
+
+    @override_settings(
+        DEBUG=False,
+        SECURE_SSL_REDIRECT=True,
+        SESSION_COOKIE_SECURE=True,
+        CSRF_COOKIE_SECURE=True,
+        SECURE_HSTS_SECONDS=31536000,
+        SECURE_HSTS_INCLUDE_SUBDOMAINS=True,
+        SECURE_HSTS_PRELOAD=True,
+        SECURE_CONTENT_TYPE_NOSNIFF=True,
+        ALLOWED_HOSTS=["example.com"],
+        SECRET_KEY="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+",
+    )
+    def test_django_check_deploy_passes_without_issues(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("check", deploy=True, stdout=out, stderr=out)
+        self.assertIn("System check identified no issues (0 silenced)", out.getvalue())
+
+
+class InfrastructureScriptTests(APITestCase):
+    """Assertions to verify infrastructure backup, restore, and SSL scripts integrity."""
+
+    def test_backup_script_contains_offsite_sync_hook(self):
+        with open("scripts/backup_db.sh", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("BACKUP_OFFSITE_CMD", content)
+        self.assertIn("Executing offsite cloud replication hook", content)
+
+    def test_restore_script_contains_preflight_checks(self):
+        with open("scripts/restore_db.sh", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("pg_isready", content)
+        self.assertIn("USER_CONFIRM", content)
+
+    def test_generate_ssl_script_contains_permission_hardening(self):
+        with open("generate-ssl.sh", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("chmod 600", content)
+        self.assertIn("chmod 644", content)
+        self.assertIn("DOMAIN=", content)

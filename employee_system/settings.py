@@ -27,11 +27,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ---------------------------------------------------------------------------
 # Core Security
 # ---------------------------------------------------------------------------
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config("SECRET_KEY")
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config("DEBUG", default=False, cast=bool)
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = config("SECRET_KEY", default="")
+if not DEBUG and (
+    not SECRET_KEY or SECRET_KEY.startswith("django-insecure-") or len(SECRET_KEY) < 50
+):
+    import warnings
+
+    warnings.warn(
+        "Production deployment detected with an insecure or short SECRET_KEY! "
+        "Please generate a random 50+ character key before serving public traffic.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
 
@@ -290,20 +301,41 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 
+
 # ---------------------------------------------------------------------------
 # CSRF Trusted Origins (required for POST/PUT requests in Django 4.0+)
 # ---------------------------------------------------------------------------
-CSRF_TRUSTED_ORIGINS = config(
+def _clean_csrf_trusted_origins(raw_origins):
+    cleaned = []
+    for origin in raw_origins:
+        o = origin.strip().rstrip("/")
+        if not o:
+            continue
+        if not (o.startswith("http://") or o.startswith("https://")):
+            o = f"https://{o}"
+        cleaned.append(o)
+    return cleaned
+
+
+_RAW_CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
     default="http://localhost:5173,http://localhost:8000,http://127.0.0.1:8000,https://localhost,https://127.0.0.1",
     cast=Csv(),
 )
+CSRF_TRUSTED_ORIGINS = _clean_csrf_trusted_origins(_RAW_CSRF_TRUSTED_ORIGINS)
 
 # ---------------------------------------------------------------------------
 # Security Headers (hardened in production)
 # ---------------------------------------------------------------------------
-# Trust X-Forwarded-Proto header from Nginx reverse proxy
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# Trust X-Forwarded-Proto and port headers from Nginx reverse proxy
+_PROXY_SSL_HEADER_CONFIG = config(
+    "SECURE_PROXY_SSL_HEADER", default="HTTP_X_FORWARDED_PROTO,https", cast=Csv()
+)
+if len(_PROXY_SSL_HEADER_CONFIG) == 2:
+    SECURE_PROXY_SSL_HEADER = (_PROXY_SSL_HEADER_CONFIG[0], _PROXY_SSL_HEADER_CONFIG[1])
+else:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_PORT = config("USE_X_FORWARDED_PORT", default=True, cast=bool)
 
 # Redirect all HTTP to HTTPS in production
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool)
@@ -312,15 +344,21 @@ SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool
 SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=not DEBUG, cast=bool)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_AGE = config("SESSION_COOKIE_AGE", default=86400, cast=int)  # 24 hours
 
 # Protect CSRF cookies
 CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=not DEBUG, cast=bool)
 CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = "Lax"
 
 # HTTP Strict Transport Security — browsers will only use HTTPS for 1 year
-SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
-SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
-SECURE_HSTS_PRELOAD = not DEBUG
+SECURE_HSTS_SECONDS = config(
+    "SECURE_HSTS_SECONDS", default=31536000 if not DEBUG else 0, cast=int
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config(
+    "SECURE_HSTS_INCLUDE_SUBDOMAINS", default=not DEBUG, cast=bool
+)
+SECURE_HSTS_PRELOAD = config("SECURE_HSTS_PRELOAD", default=not DEBUG, cast=bool)
 
 # Prevent browsers from MIME-sniffing responses
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -331,10 +369,13 @@ SECURE_BROWSER_XSS_FILTER = True
 # Prevent the site from being embedded in iframes (clickjacking)
 X_FRAME_OPTIONS = "DENY"
 
-# Content-Security-Policy header (handled via nginx in production;
-# this is a fallback for direct Django responses)
-# In production, tune this to your actual CDN/asset domains
-SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+# Referrer policy and cross-origin isolation
+SECURE_REFERRER_POLICY = config(
+    "SECURE_REFERRER_POLICY", default="strict-origin-when-cross-origin"
+)
+SECURE_CROSS_ORIGIN_OPENER_POLICY = config(
+    "SECURE_CROSS_ORIGIN_OPENER_POLICY", default="same-origin-allow-popups"
+)
 
 # ---------------------------------------------------------------------------
 # Structured Logging

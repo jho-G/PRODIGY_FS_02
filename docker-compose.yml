@@ -1,6 +1,7 @@
 services:
   # ============================================================
   # PostgreSQL Database Service (Production)
+  # NOTE: In production, override POSTGRES_PASSWORD in your .env file
   # ============================================================
   db:
     image: postgres:16-alpine
@@ -9,6 +10,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ems_db}
       POSTGRES_USER: ${POSTGRES_USER:-ems_user}
+      # SECURITY NOTE: Replace default password in .env before public deployment
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ems_secure_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -87,7 +89,10 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=${DATABASE_URL:-postgres://ems_user:ems_secure_password@db:5432/ems_db}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/1}
+      - SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,https
+      - USE_X_FORWARDED_PORT=true
     healthcheck:
       # Use the dedicated /health/ endpoint — fast, no DB query
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
