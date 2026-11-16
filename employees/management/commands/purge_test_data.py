@@ -56,7 +56,9 @@ class Command(BaseCommand):
                 "Safety guard: You must specify --confirm to permanently delete records, or --dry-run to preview."
             )
 
-        self.stdout.write(self.style.MIGRATE_HEADING("=== Pre-Deployment Test Data Purge Utility ==="))
+        self.stdout.write(
+            self.style.MIGRATE_HEADING("=== Pre-Deployment Test Data Purge Utility ===")
+        )
 
         counts = {
             "Performance Reviews": PerformanceReview.objects.count(),
@@ -74,13 +76,17 @@ class Command(BaseCommand):
             counts["Departments"] = Department.objects.count()
 
         if delete_test_users:
-            counts["Non-superuser Accounts"] = User.objects.filter(is_superuser=False).count()
+            counts["Non-superuser Accounts"] = User.objects.filter(
+                is_superuser=False
+            ).count()
 
         for model_name, count in counts.items():
             self.stdout.write(f"  - {model_name}: {count} record(s)")
 
         if dry_run:
-            self.stdout.write(self.style.SUCCESS("\n[DRY RUN] No records were deleted."))
+            self.stdout.write(
+                self.style.SUCCESS("\n[DRY RUN] No records were deleted.")
+            )
             return
 
         with transaction.atomic():

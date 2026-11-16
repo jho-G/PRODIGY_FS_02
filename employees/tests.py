@@ -2301,7 +2301,9 @@ class ManagementCommandTests(APITestCase):
     """Unit tests for verify_deployment and purge_test_data management commands."""
 
     def setUp(self):
-        self.admin = User.objects.create_superuser("admin_test", "admin@test.com", "pass12345")
+        self.admin = User.objects.create_superuser(
+            "admin_test", "admin@test.com", "pass12345"
+        )
         self.dept = Department.objects.create(name="QA Testing", description="QA")
         self.emp = _make_employee("EMP-CMD-001", department=self.dept)
 
@@ -2387,6 +2389,3 @@ class InfrastructureScriptTests(APITestCase):
         self.assertIn("chmod 600", content)
         self.assertIn("chmod 644", content)
         self.assertIn("DOMAIN=", content)
-
-
-

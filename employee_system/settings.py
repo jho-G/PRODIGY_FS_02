@@ -32,7 +32,9 @@ DEBUG = config("DEBUG", default=False, cast=bool)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config("SECRET_KEY", default="")
-if not DEBUG and (not SECRET_KEY or SECRET_KEY.startswith("django-insecure-") or len(SECRET_KEY) < 50):
+if not DEBUG and (
+    not SECRET_KEY or SECRET_KEY.startswith("django-insecure-") or len(SECRET_KEY) < 50
+):
     import warnings
 
     warnings.warn(
@@ -299,6 +301,7 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 
+
 # ---------------------------------------------------------------------------
 # CSRF Trusted Origins (required for POST/PUT requests in Django 4.0+)
 # ---------------------------------------------------------------------------
@@ -325,7 +328,9 @@ CSRF_TRUSTED_ORIGINS = _clean_csrf_trusted_origins(_RAW_CSRF_TRUSTED_ORIGINS)
 # Security Headers (hardened in production)
 # ---------------------------------------------------------------------------
 # Trust X-Forwarded-Proto and port headers from Nginx reverse proxy
-_PROXY_SSL_HEADER_CONFIG = config("SECURE_PROXY_SSL_HEADER", default="HTTP_X_FORWARDED_PROTO,https", cast=Csv())
+_PROXY_SSL_HEADER_CONFIG = config(
+    "SECURE_PROXY_SSL_HEADER", default="HTTP_X_FORWARDED_PROTO,https", cast=Csv()
+)
 if len(_PROXY_SSL_HEADER_CONFIG) == 2:
     SECURE_PROXY_SSL_HEADER = (_PROXY_SSL_HEADER_CONFIG[0], _PROXY_SSL_HEADER_CONFIG[1])
 else:
@@ -365,8 +370,12 @@ SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "DENY"
 
 # Referrer policy and cross-origin isolation
-SECURE_REFERRER_POLICY = config("SECURE_REFERRER_POLICY", default="strict-origin-when-cross-origin")
-SECURE_CROSS_ORIGIN_OPENER_POLICY = config("SECURE_CROSS_ORIGIN_OPENER_POLICY", default="same-origin-allow-popups")
+SECURE_REFERRER_POLICY = config(
+    "SECURE_REFERRER_POLICY", default="strict-origin-when-cross-origin"
+)
+SECURE_CROSS_ORIGIN_OPENER_POLICY = config(
+    "SECURE_CROSS_ORIGIN_OPENER_POLICY", default="same-origin-allow-popups"
+)
 
 # ---------------------------------------------------------------------------
 # Structured Logging

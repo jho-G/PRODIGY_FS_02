@@ -17,7 +17,11 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        self.stdout.write(self.style.MIGRATE_HEADING("=== Pre-flight Production Deployment Verification ==="))
+        self.stdout.write(
+            self.style.MIGRATE_HEADING(
+                "=== Pre-flight Production Deployment Verification ==="
+            )
+        )
 
         errors = []
         warnings = []
@@ -42,22 +46,32 @@ class Command(BaseCommand):
         if not settings.SECRET_KEY or settings.SECRET_KEY in insecure_keys:
             errors.append("SECRET_KEY is using an insecure default or is empty.")
         elif len(settings.SECRET_KEY) < 32:
-            warnings.append(f"SECRET_KEY length ({len(settings.SECRET_KEY)}) is under recommended 32 characters.")
+            warnings.append(
+                f"SECRET_KEY length ({len(settings.SECRET_KEY)}) is under recommended 32 characters."
+            )
         else:
-            passed.append(f"SECRET_KEY is configured with strong entropy ({len(settings.SECRET_KEY)} chars).")
+            passed.append(
+                f"SECRET_KEY is configured with strong entropy ({len(settings.SECRET_KEY)} chars)."
+            )
 
         # 3. Check ALLOWED_HOSTS
         if not settings.ALLOWED_HOSTS:
             errors.append("ALLOWED_HOSTS is empty.")
         elif "*" in settings.ALLOWED_HOSTS:
-            warnings.append("ALLOWED_HOSTS contains '*' wildcard. Restrict to specific production domains.")
+            warnings.append(
+                "ALLOWED_HOSTS contains '*' wildcard. Restrict to specific production domains."
+            )
         else:
-            passed.append(f"ALLOWED_HOSTS configured: {', '.join(settings.ALLOWED_HOSTS)}")
+            passed.append(
+                f"ALLOWED_HOSTS configured: {', '.join(settings.ALLOWED_HOSTS)}"
+            )
 
         # 4. Check Database Connectivity
         try:
             connection.ensure_connection()
-            passed.append(f"Database connection successful (Engine: {settings.DATABASES['default']['ENGINE']}).")
+            passed.append(
+                f"Database connection successful (Engine: {settings.DATABASES['default']['ENGINE']})."
+            )
         except Exception as e:
             errors.append(f"Database connection failed: {e}")
 
@@ -67,9 +81,13 @@ class Command(BaseCommand):
             targets = executor.loader.graph.leaf_nodes()
             plan = executor.migration_plan(targets)
             if plan:
-                errors.append(f"{len(plan)} unapplied migration(s) detected. Run `python manage.py migrate`.")
+                errors.append(
+                    f"{len(plan)} unapplied migration(s) detected. Run `python manage.py migrate`."
+                )
             else:
-                passed.append("Database schema is fully up-to-date (no unapplied migrations).")
+                passed.append(
+                    "Database schema is fully up-to-date (no unapplied migrations)."
+                )
         except Exception as e:
             errors.append(f"Failed to inspect database migration state: {e}")
 
@@ -84,23 +102,31 @@ class Command(BaseCommand):
                     "No active superuser found! Run `python manage.py createsuperuser` to avoid client lockout."
                 )
             else:
-                passed.append(f"Administrative access verified ({admin_count} active superuser account(s)).")
+                passed.append(
+                    f"Administrative access verified ({admin_count} active superuser account(s))."
+                )
         except Exception as e:
             errors.append(f"Failed to verify superuser accounts: {e}")
 
         # 7. Check Security Headers & Cookie settings
         if not getattr(settings, "SESSION_COOKIE_SECURE", False):
-            warnings.append("SESSION_COOKIE_SECURE is False. Session cookies are not HTTPS-only.")
+            warnings.append(
+                "SESSION_COOKIE_SECURE is False. Session cookies are not HTTPS-only."
+            )
         else:
             passed.append("SESSION_COOKIE_SECURE is enabled.")
 
         if not getattr(settings, "CSRF_COOKIE_SECURE", False):
-            warnings.append("CSRF_COOKIE_SECURE is False. CSRF cookies are not HTTPS-only.")
+            warnings.append(
+                "CSRF_COOKIE_SECURE is False. CSRF cookies are not HTTPS-only."
+            )
         else:
             passed.append("CSRF_COOKIE_SECURE is enabled.")
 
         if not getattr(settings, "SECURE_SSL_REDIRECT", False):
-            warnings.append("SECURE_SSL_REDIRECT is False (acceptable if reverse proxy terminates SSL).")
+            warnings.append(
+                "SECURE_SSL_REDIRECT is False (acceptable if reverse proxy terminates SSL)."
+            )
         else:
             passed.append("SECURE_SSL_REDIRECT is enabled.")
 
@@ -114,12 +140,22 @@ class Command(BaseCommand):
         for err in errors:
             self.stdout.write(self.style.ERROR(f"  [FAIL] {err}"))
 
-        self.stdout.write(self.style.MIGRATE_HEADING("-----------------------------------------------------"))
+        self.stdout.write(
+            self.style.MIGRATE_HEADING(
+                "-----------------------------------------------------"
+            )
+        )
         self.stdout.write(
             f"Summary: {len(passed)} passed, {len(warnings)} warning(s), {len(errors)} error(s)."
         )
 
         if errors:
-            raise CommandError(f"Deployment verification FAILED with {len(errors)} critical error(s).")
+            raise CommandError(
+                f"Deployment verification FAILED with {len(errors)} critical error(s)."
+            )
 
-        self.stdout.write(self.style.SUCCESS("All critical deployment pre-flight checks PASSED successfully."))
+        self.stdout.write(
+            self.style.SUCCESS(
+                "All critical deployment pre-flight checks PASSED successfully."
+            )
+        )
