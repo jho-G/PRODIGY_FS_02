@@ -317,10 +317,12 @@ SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool
 SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=not DEBUG, cast=bool)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_AGE = config("SESSION_COOKIE_AGE", default=86400, cast=int)  # 24 hours
 
 # Protect CSRF cookies
 CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=not DEBUG, cast=bool)
 CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = "Lax"
 
 # HTTP Strict Transport Security — browsers will only use HTTPS for 1 year
 SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
