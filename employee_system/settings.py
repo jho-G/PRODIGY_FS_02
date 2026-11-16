@@ -293,11 +293,24 @@ CORS_ALLOW_HEADERS = [
 # ---------------------------------------------------------------------------
 # CSRF Trusted Origins (required for POST/PUT requests in Django 4.0+)
 # ---------------------------------------------------------------------------
-CSRF_TRUSTED_ORIGINS = config(
+def _clean_csrf_trusted_origins(raw_origins):
+    cleaned = []
+    for origin in raw_origins:
+        o = origin.strip().rstrip("/")
+        if not o:
+            continue
+        if not (o.startswith("http://") or o.startswith("https://")):
+            o = f"https://{o}"
+        cleaned.append(o)
+    return cleaned
+
+
+_RAW_CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
     default="http://localhost:5173,http://localhost:8000,http://127.0.0.1:8000,https://localhost,https://127.0.0.1",
     cast=Csv(),
 )
+CSRF_TRUSTED_ORIGINS = _clean_csrf_trusted_origins(_RAW_CSRF_TRUSTED_ORIGINS)
 
 # ---------------------------------------------------------------------------
 # Security Headers (hardened in production)
