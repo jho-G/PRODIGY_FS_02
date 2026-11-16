@@ -78,6 +78,15 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Restoring database from '${BACKUP_FILE}
 
 export PGPASSWORD="${POSTGRES_PASSWORD}"
 
+# Pre-flight database connectivity check
+echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Verifying connection to ${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}..."
+if command -v pg_isready >/dev/null 2>&1; then
+    if ! pg_isready -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"; then
+        echo "ERROR: Target database ${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} is unreachable or not ready!" >&2
+        exit 1
+    fi
+fi
+
 # Decompress and stream directly into psql
 gunzip -c "${BACKUP_FILE}" | psql \
     -h "${POSTGRES_HOST}" \
