@@ -73,7 +73,22 @@ class Command(BaseCommand):
         except Exception as e:
             errors.append(f"Failed to inspect database migration state: {e}")
 
-        # 6. Check Security Headers & Cookie settings
+        # 6. Check Active Superuser Existence
+        try:
+            from django.contrib.auth import get_user_model
+
+            User = get_user_model()
+            admin_count = User.objects.filter(is_superuser=True, is_active=True).count()
+            if admin_count == 0:
+                errors.append(
+                    "No active superuser found! Run `python manage.py createsuperuser` to avoid client lockout."
+                )
+            else:
+                passed.append(f"Administrative access verified ({admin_count} active superuser account(s)).")
+        except Exception as e:
+            errors.append(f"Failed to verify superuser accounts: {e}")
+
+        # 7. Check Security Headers & Cookie settings
         if not getattr(settings, "SESSION_COOKIE_SECURE", False):
             warnings.append("SESSION_COOKIE_SECURE is False. Session cookies are not HTTPS-only.")
         else:
