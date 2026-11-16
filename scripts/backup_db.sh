@@ -78,6 +78,16 @@ if pg_dump \
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Pruning backups older than ${BACKUP_KEEP_DAYS} days in ${BACKUP_DIR}..."
     DELETED_COUNT="$(find "${BACKUP_DIR}" -maxdepth 1 -name "ems_backup_*.sql.gz*" -type f -mtime +"${BACKUP_KEEP_DAYS}" -print -delete | wc -l)"
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Pruned ${DELETED_COUNT} expired backup file(s)."
+
+    # Execute offsite cloud replication hook if BACKUP_OFFSITE_CMD is configured
+    if [[ -n "${BACKUP_OFFSITE_CMD:-}" ]]; then
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Executing offsite cloud replication hook..."
+        SYNC_CMD="${BACKUP_OFFSITE_CMD//\{BACKUP_FILE\}/$BACKUP_FILEPATH}"
+        SYNC_CMD="${SYNC_CMD//\{BACKUP_DIR\}/$BACKUP_DIR}"
+        eval "$SYNC_CMD"
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Offsite cloud replication completed successfully."
+    fi
+
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Backup and retention lifecycle finished successfully."
 else
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ERROR: Database backup failed!" >&2
