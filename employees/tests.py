@@ -2344,3 +2344,25 @@ class ManagementCommandTests(APITestCase):
         self.assertEqual(Department.objects.count(), 1)
         self.assertIn("Successfully purged test records", out.getvalue())
 
+    @override_settings(
+        DEBUG=False,
+        SECURE_SSL_REDIRECT=True,
+        SESSION_COOKIE_SECURE=True,
+        CSRF_COOKIE_SECURE=True,
+        SECURE_HSTS_SECONDS=31536000,
+        SECURE_HSTS_INCLUDE_SUBDOMAINS=True,
+        SECURE_HSTS_PRELOAD=True,
+        SECURE_CONTENT_TYPE_NOSNIFF=True,
+        ALLOWED_HOSTS=["example.com"],
+        SECRET_KEY="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+",
+    )
+    def test_django_check_deploy_passes_without_issues(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("check", deploy=True, stdout=out, stderr=out)
+        self.assertIn("System check identified no issues (0 silenced)", out.getvalue())
+
+
