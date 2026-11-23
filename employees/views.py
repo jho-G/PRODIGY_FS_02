@@ -23,8 +23,12 @@ from .models import (
     Holiday,
     LeaveRequest,
     Notification,
+    OfficeLocation,
+    OvertimeRecord,
     Payslip,
     PerformanceReview,
+    Shift,
+    ShiftAssignment,
 )
 from .notifications import (
     notify_document_uploaded,
@@ -54,8 +58,12 @@ from .serializers import (
     LeaveRequestSerializer,
     LoginSerializer,
     NotificationSerializer,
+    OfficeLocationSerializer,
+    OvertimeRecordSerializer,
     PayslipSerializer,
     PerformanceReviewSerializer,
+    ShiftAssignmentSerializer,
+    ShiftSerializer,
     UserSerializer,
 )
 
@@ -1049,12 +1057,74 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             )
         return employee, None
 
+    def _apply_punch_geofence_and_shift(
+        self, request, record, employee, current_time, today
+    ):
+        from employees.models import Shift, ShiftAssignment
+        from employees.services.geofence import (
+            get_client_ip,
+            verify_punch_geofence,
+        )
+
+        # 1. Resolve employee shift for today if not already set
+        if not record.shift:
+            assignment = (
+                ShiftAssignment.objects.filter(
+                    employee=employee,
+                    is_active=True,
+                    start_date__lte=today,
+                )
+                .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+                .order_by("-start_date")
+                .first()
+            )
+            if assignment:
+                record.shift = assignment.shift
+            else:
+                dept = employee.department
+                default_shift = (
+                    Shift.objects.filter(department=dept, is_default=True).first()
+                    if dept
+                    else None
+                ) or Shift.objects.filter(
+                    department__isnull=True, is_default=True
+                ).first()
+                if default_shift:
+                    record.shift = default_shift
+
+        # 2. Geofence & IP verification
+        lat = request.data.get("latitude")
+        lon = request.data.get("longitude")
+        client_ip = get_client_ip(request)
+
+        is_verified, is_flagged, reason = verify_punch_geofence(lat, lon, client_ip)
+        record.punch_in_latitude = lat
+        record.punch_in_longitude = lon
+        record.punch_in_ip = client_ip
+        record.is_geofence_verified = is_verified
+        record.is_flagged = is_flagged
+        record.flag_reason = reason if is_flagged else ""
+
+        # 3. Dynamic shift-based late calculation
+        late_cutoff = (
+            record.shift.get_late_cutoff()
+            if record.shift
+            else AttendanceRecord.LATE_CUTOFF
+        )
+        if current_time > late_cutoff:
+            record.status = "LATE"
+        else:
+            record.status = "PRESENT"
+
     @action(detail=False, methods=["post"], url_path="punch")
     def punch(self, request):
         """
         Record a check-in or check-out for today.
         Creates an AttendanceRecord for today if none exists yet.
         """
+        from datetime import datetime
+        from decimal import Decimal
+
         today = timezone.now().date()
         current_time = timezone.now().time()
 
@@ -1084,6 +1154,26 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 )
             record.check_out = current_time
             record.save()
+
+            # Overtime tracking past scheduled shift
+            if record.shift and record.shift.end_time:
+                shift_end_dt = datetime.combine(today, record.shift.end_time)
+                check_out_dt = datetime.combine(today, current_time)
+                if check_out_dt > shift_end_dt:
+                    diff_hours = (check_out_dt - shift_end_dt).total_seconds() / 3600.0
+                    if diff_hours >= 0.5:
+                        OvertimeRecord.objects.get_or_create(
+                            employee=employee,
+                            attendance_record=record,
+                            date=today,
+                            defaults={
+                                "hours": Decimal(str(round(diff_hours, 2))),
+                                "reason": f"Shift overtime past {record.shift.name} ({record.shift.end_time.strftime('%H:%M')})",
+                                "status": "PENDING",
+                                "compensation_type": "PAYOUT",
+                            },
+                        )
+
             return Response(
                 AttendanceRecordSerializer(record).data, status=status.HTTP_200_OK
             )
@@ -1093,10 +1183,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                     {"detail": "Check-in already recorded for today."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            if current_time > AttendanceRecord.LATE_CUTOFF:
-                record.status = "LATE"
-            else:
-                record.status = "PRESENT"
+            self._apply_punch_geofence_and_shift(
+                request, record, employee, current_time, today
+            )
             record.check_in = current_time
             record.save()
             return Response(
@@ -1107,8 +1196,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="punch_in")
     def punch_in(self, request):
         """
-        Record check-in for today.
-        Creates an AttendanceRecord for today if none exists yet.
+        Record check-in for today with geofence and dynamic shift late cutoff.
         """
         today = timezone.now().date()
         current_time = timezone.now().time()
@@ -1129,10 +1217,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if current_time > AttendanceRecord.LATE_CUTOFF:
-            record.status = "LATE"
-        else:
-            record.status = "PRESENT"
+        self._apply_punch_geofence_and_shift(
+            request, record, employee, current_time, today
+        )
         record.check_in = current_time
         record.save()
         return Response(
@@ -1146,6 +1233,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         Record check-out for today.
         Requires an AttendanceRecord with check_in already recorded.
         """
+        from datetime import datetime
+        from decimal import Decimal
+
         today = timezone.now().date()
         current_time = timezone.now().time()
 
@@ -1168,6 +1258,26 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 
         record.check_out = current_time
         record.save()
+
+        # Overtime tracking past scheduled shift
+        if record.shift and record.shift.end_time:
+            shift_end_dt = datetime.combine(today, record.shift.end_time)
+            check_out_dt = datetime.combine(today, current_time)
+            if check_out_dt > shift_end_dt:
+                diff_hours = (check_out_dt - shift_end_dt).total_seconds() / 3600.0
+                if diff_hours >= 0.5:
+                    OvertimeRecord.objects.get_or_create(
+                        employee=employee,
+                        attendance_record=record,
+                        date=today,
+                        defaults={
+                            "hours": Decimal(str(round(diff_hours, 2))),
+                            "reason": f"Shift overtime past {record.shift.name} ({record.shift.end_time.strftime('%H:%M')})",
+                            "status": "PENDING",
+                            "compensation_type": "PAYOUT",
+                        },
+                    )
+
         return Response(
             AttendanceRecordSerializer(record).data,
             status=status.HTTP_200_OK,
@@ -1182,6 +1292,58 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     def check_out_today(self, request):
         """Dedicated collection action for check-out on today's record."""
         return self.punch_out(request)
+
+    @action(detail=True, methods=["post"], url_path="resolve_flag")
+    def resolve_flag(self, request, pk=None):
+        """HR/Manager resolves a geofence-flagged punch-in."""
+        record = self.get_object()
+        record.is_flagged = False
+        notes = request.data.get("notes", "Flag reviewed and approved by manager.")
+        record.flag_reason = f"Resolved: {notes}"
+        record.save()
+        return Response(
+            AttendanceRecordSerializer(record).data, status=status.HTTP_200_OK
+        )
+
+    @action(detail=False, methods=["get"], url_path="my_shift")
+    def my_shift(self, request):
+        """Fetch the authenticated employee's active shift for today."""
+        profile = getattr(request.user, "profile", None)
+        emp = profile.employee if profile else None
+        if not emp:
+            return Response({"shift": None, "detail": "No linked employee profile."})
+
+        today = timezone.now().date()
+        assignment = (
+            ShiftAssignment.objects.filter(
+                employee=emp,
+                is_active=True,
+                start_date__lte=today,
+            )
+            .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+            .order_by("-start_date")
+            .first()
+        )
+        shift = (
+            assignment.shift
+            if assignment
+            else (
+                Shift.objects.filter(department=emp.department, is_default=True).first()
+                or Shift.objects.filter(
+                    department__isnull=True, is_default=True
+                ).first()
+            )
+        )
+        return Response(
+            {
+                "employee_id": emp.employee_id,
+                "employee_name": emp.full_name,
+                "shift": ShiftSerializer(shift).data if shift else None,
+                "assignment": ShiftAssignmentSerializer(assignment).data
+                if assignment
+                else None,
+            }
+        )
 
     def get_queryset(self):
         queryset = AttendanceRecord.objects.select_related("employee").all()
@@ -1438,15 +1600,40 @@ class PayslipViewSet(viewsets.ModelViewSet):
         updated_count = 0
         for emp in Employee.objects.filter(is_active=True):
             basic = emp.salary_monthly or (emp.salary or 0) / 12
+
+            # Calculate approved overtime pay for payout compensation type
+            from decimal import Decimal
+
+            overtime_qs = OvertimeRecord.objects.filter(
+                employee=emp,
+                date__year=year,
+                date__month=month,
+                status="APPROVED",
+                compensation_type="PAYOUT",
+            )
+            hourly_rate = (Decimal(str(basic)) / Decimal("160.00")).quantize(
+                Decimal("0.01")
+            )
+            overtime_total = sum(
+                (rec.hours * rec.rate_multiplier * hourly_rate) for rec in overtime_qs
+            )
+            overtime_total = (
+                Decimal(str(overtime_total)).quantize(Decimal("0.01"))
+                if overtime_qs.exists()
+                else Decimal("0.00")
+            )
+
             payslip, created = Payslip.objects.update_or_create(
                 employee=emp,
                 period_year=year,
                 period_month=month,
                 defaults={
                     "basic_salary": basic,
+                    "overtime_pay": overtime_total,
                     "currency": emp.currency or "USD",
                 },
             )
+            overtime_qs.update(is_processed=True)
             notify_payslip_generated(payslip)
             created_count += 1 if created else 0
             updated_count += 0 if created else 1
@@ -2031,3 +2218,145 @@ class CalendarTokenAPIView(APIView):
                 "webcal_url": webcal_url,
             }
         )
+
+
+class ShiftViewSet(viewsets.ModelViewSet):
+    """
+    CRUD ViewSet for Work Shifts.
+    Reads: all authenticated users. Writes: HR/Admin only.
+    """
+
+    queryset = Shift.objects.select_related("department").all()
+    serializer_class = ShiftSerializer
+    permission_classes = [IsAuthenticatedReadOnlyOrStaff]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["name", "code", "description"]
+    ordering_fields = ["start_time", "name"]
+
+
+class ShiftAssignmentViewSet(viewsets.ModelViewSet):
+    """
+    CRUD ViewSet for assigning shifts to employees.
+    Employees see their own assignments; HR/Managers see all.
+    """
+
+    queryset = ShiftAssignment.objects.select_related("employee", "shift").all()
+    serializer_class = ShiftAssignmentSerializer
+    permission_classes = [IsAuthenticatedReadOnlyOrStaff]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = [
+        "employee__first_name",
+        "employee__last_name",
+        "employee__employee_id",
+        "shift__name",
+    ]
+    ordering_fields = ["start_date", "created_at"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        role = get_role(user)
+        if role == ROLE_EMPLOYEE:
+            profile = getattr(user, "profile", None)
+            emp = profile.employee if profile else None
+            return qs.filter(employee=emp) if emp else qs.none()
+        return qs
+
+
+class OfficeLocationViewSet(viewsets.ModelViewSet):
+    """
+    CRUD ViewSet for registered office premises geofences and IP ranges.
+    """
+
+    queryset = OfficeLocation.objects.all()
+    serializer_class = OfficeLocationSerializer
+    permission_classes = [IsAuthenticatedReadOnlyOrStaff]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["name", "address", "allowed_ip_ranges"]
+    ordering_fields = ["name", "created_at"]
+
+
+class OvertimeRecordViewSet(viewsets.ModelViewSet):
+    """
+    CRUD ViewSet for overtime hours logging and manager approval workflows.
+    """
+
+    queryset = OvertimeRecord.objects.select_related(
+        "employee", "attendance_record", "approved_by"
+    ).all()
+    serializer_class = OvertimeRecordSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = [
+        "employee__first_name",
+        "employee__last_name",
+        "employee__employee_id",
+        "reason",
+    ]
+    ordering_fields = ["date", "hours", "created_at"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        role = get_role(user)
+        if role == ROLE_EMPLOYEE:
+            profile = getattr(user, "profile", None)
+            emp = profile.employee if profile else None
+            return qs.filter(employee=emp) if emp else qs.none()
+        return qs
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        role = get_role(user)
+        if role == ROLE_EMPLOYEE and "employee" not in self.request.data:
+            profile = getattr(user, "profile", None)
+            if profile and profile.employee:
+                serializer.save(employee=profile.employee)
+                return
+        serializer.save()
+
+    @action(detail=True, methods=["post"], url_path="approve")
+    def approve(self, request, pk=None):
+        """Manager/HR approves an overtime request."""
+        from decimal import Decimal
+
+        if not is_hr_or_above(request.user) and get_role(request.user) != ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers or HR/Admins can approve overtime."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        rec = self.get_object()
+        if rec.status == "APPROVED":
+            return Response(
+                {"detail": "Overtime request is already approved."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        rec.status = "APPROVED"
+        rec.approved_by = request.user
+        rec.approved_at = timezone.now()
+
+        # If comp-off, credit to employee comp_off_days immediately
+        if rec.compensation_type == "COMP_OFF" and not rec.is_processed:
+            # 8 hours of overtime = 1 compensatory leave day
+            comp_days = (rec.hours / Decimal("8.00")).quantize(Decimal("0.01"))
+            rec.employee.comp_off_days += comp_days
+            rec.employee.save(update_fields=["comp_off_days"])
+            rec.is_processed = True
+
+        rec.save()
+        return Response(OvertimeRecordSerializer(rec).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="reject")
+    def reject(self, request, pk=None):
+        """Manager/HR rejects an overtime request."""
+        if not is_hr_or_above(request.user) and get_role(request.user) != ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers or HR/Admins can reject overtime."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        rec = self.get_object()
+        rec.status = "REJECTED"
+        rec.approved_by = request.user
+        rec.approved_at = timezone.now()
+        rec.save()
+        return Response(OvertimeRecordSerializer(rec).data, status=status.HTTP_200_OK)

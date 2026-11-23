@@ -14,6 +14,7 @@ import {
   Star,
   Bell,
   Calendar,
+  Clock,
 } from 'lucide-react';
 import CalendarModal from './CalendarModal';
 import './Layout.css';
@@ -173,6 +174,17 @@ export default function Layout() {
                 >
                   <CalendarCheck size={18} />
                   <span>Attendance</span>
+                </NavLink>
+              </li>
+              <li>
+                <NavLink
+                  to="/shifts"
+                  className={({ isActive }) =>
+                    `nav-link-item ${isActive ? 'active' : ''}`
+                  }
+                >
+                  <Clock size={18} />
+                  <span>Shifts & Rosters</span>
                 </NavLink>
               </li>
               <li>

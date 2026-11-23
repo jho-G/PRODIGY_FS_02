@@ -333,6 +333,14 @@ export const attendanceApi = {
     });
     return response.data;
   },
+  getMyShift: async () => {
+    const response = await api.get('attendance/my_shift/');
+    return response.data;
+  },
+  resolveFlag: async (id, data = {}) => {
+    const response = await api.post(`attendance/${id}/resolve_flag/`, data);
+    return response.data;
+  },
 };
 
 /**
@@ -453,6 +461,91 @@ export const calendarApi = {
   },
   regenerateToken: async () => {
     const response = await api.post('calendar/token/');
+    return response.data;
+  },
+};
+
+/**
+ * Shift Rostering & Schedule Management Endpoints
+ */
+export const shiftApi = {
+  getAll: async (params = {}) => {
+    const response = await api.get('shifts/', { params });
+    return response.data;
+  },
+  create: async (data) => {
+    const response = await api.post('shifts/', data);
+    return response.data;
+  },
+  update: async (id, data) => {
+    const response = await api.patch(`shifts/${id}/`, data);
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await api.delete(`shifts/${id}/`);
+    return response.data;
+  },
+};
+
+export const shiftAssignmentApi = {
+  getAll: async (params = {}) => {
+    const response = await api.get('shift-assignments/', { params });
+    return response.data;
+  },
+  create: async (data) => {
+    const response = await api.post('shift-assignments/', data);
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await api.delete(`shift-assignments/${id}/`);
+    return response.data;
+  },
+};
+
+/**
+ * Geofenced Office Locations Endpoints
+ */
+export const officeLocationApi = {
+  getAll: async (params = {}) => {
+    const response = await api.get('office-locations/', { params });
+    return response.data;
+  },
+  create: async (data) => {
+    const response = await api.post('office-locations/', data);
+    return response.data;
+  },
+  update: async (id, data) => {
+    const response = await api.patch(`office-locations/${id}/`, data);
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await api.delete(`office-locations/${id}/`);
+    return response.data;
+  },
+};
+
+/**
+ * Overtime & Comp-Off Tracking Endpoints
+ */
+export const overtimeApi = {
+  getAll: async (params = {}) => {
+    const response = await api.get('overtime/', { params });
+    return response.data;
+  },
+  create: async (data) => {
+    const response = await api.post('overtime/', data);
+    return response.data;
+  },
+  approve: async (id) => {
+    const response = await api.post(`overtime/${id}/approve/`);
+    return response.data;
+  },
+  reject: async (id) => {
+    const response = await api.post(`overtime/${id}/reject/`);
+    return response.data;
+  },
+  delete: async (id) => {
+    const response = await api.delete(`overtime/${id}/`);
     return response.data;
   },
 };

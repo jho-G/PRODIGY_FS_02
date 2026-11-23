@@ -9,6 +9,7 @@ import Employees from './pages/Employees';
 import Departments from './pages/Departments';
 import Leave from './pages/Leave';
 import Attendance from './pages/Attendance';
+import Shifts from './pages/Shifts';
 import Payroll from './pages/Payroll';
 import Performance from './pages/Performance';
 
@@ -30,6 +31,7 @@ export default function App() {
                 <Route path="/departments" element={<Departments />} />
                 <Route path="/leave" element={<Leave />} />
                 <Route path="/attendance" element={<Attendance />} />
+                <Route path="/shifts" element={<Shifts />} />
                 <Route path="/payroll" element={<Payroll />} />
                 <Route path="/performance" element={<Performance />} />
               </Route>
