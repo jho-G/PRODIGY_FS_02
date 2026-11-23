@@ -30,6 +30,12 @@ from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from employees.services.geofence import (
+    haversine_distance,
+    is_ip_allowed,
+    verify_punch_geofence,
+)
+
 from .models import (
     AttendanceRecord,
     Department,
@@ -39,8 +45,12 @@ from .models import (
     Holiday,
     LeaveRequest,
     Notification,
+    OfficeLocation,
+    OvertimeRecord,
     Payslip,
     PerformanceReview,
+    Shift,
+    ShiftAssignment,
     UserProfile,
 )
 
@@ -2566,3 +2576,206 @@ class ExportServiceTests(APITestCase):
         resp_xlsx = self.client.get("/api/departments/export/?format=xlsx")
         self.assertEqual(resp_xlsx.status_code, status.HTTP_200_OK)
         self.assertIn("spreadsheetml", resp_xlsx["Content-Type"])
+
+
+class ShiftAndRosteringTests(APITestCase):
+    """Unit tests for shifts and dynamic schedule rostering."""
+
+    def setUp(self):
+        self.dept = Department.objects.create(name="Engineering")
+        self.emp = _make_employee(
+            "EMP-SHIFT-1",
+            department=self.dept,
+            salary=80000,
+        )
+        self.admin = _user_with_role("shift_admin", "ADMIN", employee=self.emp)
+        self.shift = Shift.objects.create(
+            name="Morning Shift",
+            code="MORN-01",
+            start_time=time(10, 0),
+            end_time=time(18, 0),
+            grace_period_minutes=15,
+            is_default=False,
+        )
+
+    def test_shift_model_late_cutoff(self):
+        cutoff = self.shift.get_late_cutoff()
+        self.assertEqual(cutoff, time(10, 15))
+
+    def test_shift_assignment_resolution_and_attendance_dynamic_late(self):
+        # Assign shift to employee
+        ShiftAssignment.objects.create(
+            employee=self.emp,
+            shift=self.shift,
+            start_date=date.today() - timedelta(days=1),
+            is_active=True,
+        )
+
+        # Punch in at 10:10 (within 10:15 grace period) -> PRESENT
+        rec1 = AttendanceRecord.objects.create(
+            employee=self.emp,
+            date=date.today(),
+            check_in=time(10, 10),
+        )
+        self.assertEqual(rec1.status, "PRESENT")
+        self.assertEqual(rec1.shift, self.shift)
+
+        # Punch in at 10:20 (after 10:15 grace period) -> LATE
+        rec2 = AttendanceRecord.objects.create(
+            employee=self.emp,
+            date=date.today() - timedelta(days=1),
+            check_in=time(10, 20),
+        )
+        self.assertEqual(rec2.status, "LATE")
+
+    def test_shift_crud_and_my_shift_api(self):
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.get("/api/shifts/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        # Check my_shift endpoint
+        ShiftAssignment.objects.create(
+            employee=self.emp,
+            shift=self.shift,
+            start_date=date.today(),
+            is_active=True,
+        )
+        resp_my = self.client.get("/api/attendance/my_shift/")
+        self.assertEqual(resp_my.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp_my.data["shift"]["code"], "MORN-01")
+
+
+class GeofenceAndIPTests(APITestCase):
+    """Unit tests for Geofenced & IP-Restricted Clock-In."""
+
+    def setUp(self):
+        self.dept = Department.objects.create(name="Operations")
+        self.emp = _make_employee(
+            "EMP-GEO-1",
+            department=self.dept,
+        )
+        self.admin = _user_with_role("geo_admin", "ADMIN", employee=self.emp)
+        # Office at 37.7749, -122.4194 with 200m radius and allowed subnet 192.168.1.0/24
+        self.office = OfficeLocation.objects.create(
+            name="HQ Office",
+            latitude=37.7749,
+            longitude=-122.4194,
+            radius_meters=200,
+            allowed_ip_ranges="192.168.1.0/24, 10.0.0.5",
+            is_active=True,
+        )
+
+    def test_haversine_distance(self):
+        # Point right next to HQ (<50m away)
+        dist = haversine_distance(37.7749, -122.4194, 37.7750, -122.4194)
+        self.assertLess(dist, 50.0)
+
+        # Far away point (>1000m)
+        dist_far = haversine_distance(37.7749, -122.4194, 37.8000, -122.4194)
+        self.assertGreater(dist_far, 1000.0)
+
+    def test_is_ip_allowed(self):
+        self.assertTrue(is_ip_allowed("192.168.1.50", "192.168.1.0/24"))
+        self.assertTrue(is_ip_allowed("10.0.0.5", "192.168.1.0/24, 10.0.0.5"))
+        self.assertFalse(is_ip_allowed("8.8.8.8", "192.168.1.0/24"))
+
+    def test_verify_punch_geofence_in_and_out_of_bounds(self):
+        # Inside coordinates
+        verified, flagged, reason = verify_punch_geofence(
+            37.77491, -122.41941, "1.2.3.4"
+        )
+        self.assertTrue(verified)
+        self.assertFalse(flagged)
+
+        # Outside coordinates and non-whitelisted IP
+        verified_out, flagged_out, reason_out = verify_punch_geofence(
+            40.7128, -74.0060, "1.2.3.4"
+        )
+        self.assertFalse(verified_out)
+        self.assertTrue(flagged_out)
+        self.assertIn("outside", reason_out.lower())
+
+        # Outside coordinates but with whitelisted IP
+        verified_ip, flagged_ip, reason_ip = verify_punch_geofence(
+            40.7128, -74.0060, "192.168.1.42"
+        )
+        self.assertTrue(verified_ip)
+        self.assertFalse(flagged_ip)
+
+    def test_punch_in_flags_and_manager_resolves_flag(self):
+        self.client.force_authenticate(user=self.admin)
+        # Punch in from far away coordinates
+        res = self.client.post(
+            "/api/attendance/punch_in/",
+            {"latitude": 51.5074, "longitude": -0.1278},
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        rec = AttendanceRecord.objects.get(employee=self.emp, date=date.today())
+        self.assertTrue(rec.is_flagged)
+        self.assertIn("outside", rec.flag_reason.lower())
+
+        # Manager resolves flag
+        res_resolve = self.client.post(f"/api/attendance/{rec.id}/resolve_flag/")
+        self.assertEqual(res_resolve.status_code, status.HTTP_200_OK)
+        rec.refresh_from_db()
+        self.assertFalse(rec.is_flagged)
+
+
+class OvertimeWorkflowTests(APITestCase):
+    """Unit tests for Overtime & Comp-Off Tracking."""
+
+    def setUp(self):
+        self.dept = Department.objects.create(name="Support")
+        self.emp = _make_employee(
+            "EMP-OT-1",
+            department=self.dept,
+            salary=72000,
+        )
+        self.admin = _user_with_role("ot_admin", "ADMIN", employee=self.emp)
+        self.client.force_authenticate(user=self.admin)
+
+    def test_overtime_approval_with_comp_off(self):
+        self.assertEqual(self.emp.comp_off_days, 0)
+        ot = OvertimeRecord.objects.create(
+            employee=self.emp,
+            date=date.today(),
+            hours=8.0,
+            rate_multiplier=1.0,
+            compensation_type="COMP_OFF",
+            status="PENDING",
+            reason="Weekend emergency deploy",
+        )
+
+        res = self.client.post(f"/api/overtime/{ot.id}/approve/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ot.refresh_from_db()
+        self.assertEqual(ot.status, "APPROVED")
+        self.emp.refresh_from_db()
+        # 8 hours = 1 comp-off day
+        self.assertEqual(self.emp.comp_off_days, 1)
+
+    def test_overtime_approval_with_payout_included_in_payslip(self):
+        ot = OvertimeRecord.objects.create(
+            employee=self.emp,
+            date=date(2026, 3, 15),
+            hours=5.0,
+            rate_multiplier=1.5,
+            compensation_type="PAYOUT",
+            status="APPROVED",
+            approved_by=self.admin,
+            is_processed=False,
+            reason="Release crunch",
+        )
+
+        # Generate payslip for 2026-03
+        res = self.client.post(
+            "/api/payslips/generate/",
+            {"year": 2026, "month": 3},
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ot.refresh_from_db()
+        self.assertTrue(ot.is_processed)
+
+        slip = Payslip.objects.get(employee=self.emp, period_year=2026, period_month=3)
+        self.assertGreater(slip.overtime_pay, 0)
+        self.assertGreater(slip.gross_pay, slip.basic_salary)
