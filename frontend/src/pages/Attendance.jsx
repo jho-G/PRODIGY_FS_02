@@ -11,6 +11,8 @@ import {
   LogIn,
   LogOut,
   Loader2,
+  Download,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { attendanceApi, employeeApi } from '../api';
 import { useAuth } from '../context/useAuth';
@@ -57,6 +59,7 @@ export default function Attendance() {
 
   const [busyId, setBusyId] = useState(null);
   const [toast, setToast] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const showToast = (message, type = 'summary') => {
     setToast({ message, type });
@@ -301,6 +304,34 @@ export default function Attendance() {
     });
   };
 
+  const handleExport = async (format = 'xlsx') => {
+    try {
+      setExporting(true);
+      const params = { format };
+      if (employeeFilter) params.employee = employeeFilter;
+      if (statusFilter) params.status = statusFilter;
+      if (dateFrom) params.date_after = dateFrom;
+      if (dateTo) params.date_before = dateTo;
+
+      const blob = await attendanceApi.export(params);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const ext = format === 'xlsx' ? 'xlsx' : 'csv';
+      link.download = `attendance_records_${new Date().toISOString().slice(0, 10)}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showToast(`Attendance report exported as ${format.toUpperCase()}.`, 'success');
+    } catch (err) {
+      console.error('Attendance export failed:', err);
+      showToast(`Failed to export attendance report as ${format.toUpperCase()}.`, 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="attendance-page animate-fade-in">
       {/* Toast Notification */}
@@ -355,6 +386,24 @@ export default function Attendance() {
               <span>Monthly Summary</span>
             </button>
           </div>
+          <button
+            onClick={() => handleExport('xlsx')}
+            className="btn btn-sm btn-secondary"
+            disabled={exporting}
+            title="Export attendance records to Excel"
+          >
+            {exporting ? <Loader2 size={16} className="spin" /> : <FileSpreadsheet size={16} />}
+            <span>Export Excel</span>
+          </button>
+          <button
+            onClick={() => handleExport('csv')}
+            className="btn btn-sm btn-secondary"
+            disabled={exporting}
+            title="Export attendance records to CSV"
+          >
+            <Download size={16} />
+            <span>Export CSV</span>
+          </button>
         </div>
       </div>
 

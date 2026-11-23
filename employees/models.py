@@ -43,6 +43,22 @@ class UserProfile(models.Model):
         help_text="Employee record belonging to this login (for self-service).",
     )
     phone_number = models.CharField(max_length=17, blank=True)
+    calendar_token = models.CharField(
+        max_length=64,
+        unique=True,
+        blank=True,
+        null=True,
+        help_text="Secure feed token for personal calendar synchronization (.ics).",
+    )
+
+    def get_or_create_calendar_token(self):
+        """Return existing calendar token or generate a new cryptographically secure token."""
+        if not self.calendar_token:
+            import secrets
+
+            self.calendar_token = secrets.token_urlsafe(32)
+            self.save(update_fields=["calendar_token"])
+        return self.calendar_token
 
     def __str__(self):
         return f"{self.user.username} ({self.get_role_display()})"

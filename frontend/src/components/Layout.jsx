@@ -13,7 +13,9 @@ import {
   Banknote,
   Star,
   Bell,
+  Calendar,
 } from 'lucide-react';
+import CalendarModal from './CalendarModal';
 import './Layout.css';
 
 export default function Layout() {
@@ -23,6 +25,7 @@ export default function Layout() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
   const notifRef = useRef(null);
 
   const fetchUnread = async () => {
@@ -199,6 +202,18 @@ export default function Layout() {
         </div>
 
         <div className="nav-right">
+          {/* Calendar Sync Button */}
+          <button
+            type="button"
+            className="notification-btn"
+            onClick={() => setShowCalendarModal(true)}
+            title="Subscribe to iCalendar feed (.ics / Google / Outlook)"
+            aria-label="Calendar Sync"
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Calendar size={18} />
+          </button>
+
           {/* Notification Bell & Dropdown */}
           <div className="notification-wrapper" ref={notifRef}>
             <button
@@ -292,6 +307,12 @@ export default function Layout() {
       <main className="app-main-content">
         <Outlet />
       </main>
+
+      {/* Calendar Subscription Modal */}
+      <CalendarModal
+        isOpen={showCalendarModal}
+        onClose={() => setShowCalendarModal(false)}
+      />
     </div>
   );
 }

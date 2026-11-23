@@ -12,6 +12,10 @@ import {
   Trash2,
   Zap,
   Download,
+  FileDown,
+  Mail,
+  Send,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { payrollApi, employeeApi } from '../api';
 import { useAuth } from '../context/useAuth';
@@ -275,27 +279,86 @@ export default function Payroll() {
     }
   };
 
-  const handleExportCsv = async () => {
+  const handleDownloadPdf = async (slip) => {
     try {
-      setExporting(true);
-      const params = {};
-      if (employeeFilter) params.employee = employeeFilter;
-      if (yearFilter) params.year = yearFilter;
-      if (monthFilter) params.month = monthFilter;
-
-      const blob = await payrollApi.exportCsv(params);
+      setBusyId(`pdf-${slip.id}`);
+      const blob = await payrollApi.downloadPdf(slip.id);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `payroll_${yearFilter || 'all'}_${monthFilter ? MONTHS[Number(monthFilter) - 1] : 'all'}.csv`;
+      link.download = `payslip_${slip.employee_id_code}_${slip.period_year}_${String(slip.period_month).padStart(2, '0')}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      showToast('Payroll report exported as CSV.');
+      showToast(`PDF payslip downloaded for ${slip.employee_name}.`);
     } catch (err) {
-      console.error('Payroll CSV export failed:', err);
-      showToast('Failed to export payroll CSV report.', 'error');
+      console.error('Failed to download PDF:', err);
+      showToast('Failed to download PDF payslip.', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleSendEmail = async (slip) => {
+    if (!isHR) return;
+    const confirmed = window.confirm(
+      `Email official payslip PDF to ${slip.employee_name}?`
+    );
+    if (!confirmed) return;
+    try {
+      setBusyId(`email-${slip.id}`);
+      const res = await payrollApi.sendEmail(slip.id);
+      showToast(res.detail || `Payslip emailed to ${slip.employee_name}.`);
+    } catch (err) {
+      console.error('Failed to send payslip email:', err);
+      showToast(err.response?.data?.detail || 'Failed to email payslip.', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleBatchEmail = async () => {
+    if (!isHR) return;
+    const [year, month] = summaryMonthParts;
+    const confirmed = window.confirm(
+      `Send official PDF payslips via email to all active employees for ${MONTHS[month - 1]} ${year}?`
+    );
+    if (!confirmed) return;
+    try {
+      setGenerating(true);
+      const res = await payrollApi.batchEmail({ year, month });
+      showToast(res.detail || `Batch email completed: ${res.sent} sent.`);
+    } catch (err) {
+      console.error('Batch email failed:', err);
+      showToast(err.response?.data?.detail || 'Batch email failed.', 'error');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleExport = async (format = 'xlsx') => {
+    try {
+      setExporting(true);
+      const params = { format };
+      if (employeeFilter) params.employee = employeeFilter;
+      if (yearFilter) params.year = yearFilter;
+      if (monthFilter) params.month = monthFilter;
+
+      const blob = await payrollApi.export(params);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const ext = format === 'xlsx' ? 'xlsx' : 'csv';
+      link.download = `payroll_${yearFilter || 'all'}_${monthFilter ? MONTHS[Number(monthFilter) - 1] : 'all'}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showToast(`Payroll report exported as ${format.toUpperCase()}.`);
+    } catch (err) {
+      console.error('Payroll export failed:', err);
+      showToast(`Failed to export payroll report as ${format.toUpperCase()}.`, 'error');
     } finally {
       setExporting(false);
     }
@@ -350,13 +413,23 @@ export default function Payroll() {
               <span>{generating ? 'Generating...' : 'Generate Monthly Payroll'}</span>
             </button>
           )}
-          <button onClick={handleExportCsv} className="btn btn-secondary" disabled={exporting} title="Export filtered payroll records to CSV">
+          {isHR && (
+            <button onClick={handleBatchEmail} className="btn btn-secondary" disabled={generating} title="Batch email official PDF payslips to all employees">
+              <Mail size={18} />
+              <span>Batch Email</span>
+            </button>
+          )}
+          <button onClick={() => handleExport('xlsx')} className="btn btn-secondary" disabled={exporting} title="Export filtered payroll records to Excel">
             {exporting ? (
               <span className="spinner" style={{ width: 16, height: 16 }} />
             ) : (
-              <Download size={18} />
+              <FileSpreadsheet size={18} />
             )}
-            <span>{exporting ? 'Exporting...' : 'Export CSV'}</span>
+            <span>Export Excel</span>
+          </button>
+          <button onClick={() => handleExport('csv')} className="btn btn-secondary" disabled={exporting} title="Export filtered payroll records to CSV">
+            <Download size={18} />
+            <span>Export CSV</span>
           </button>
           {isHR && (
             <button onClick={handleOpenModal} className="btn btn-primary">
@@ -477,20 +550,20 @@ export default function Payroll() {
                 <th>Bonus</th>
                 <th>Deductions</th>
                 <th>Net Pay</th>
-                {isHR && <th style={{ textAlign: 'right' }}>Actions</th>}
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={isHR ? 8 : 7} style={{ textAlign: 'center', padding: '36px' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '36px' }}>
                     <div className="spinner-primary" style={{ margin: '0 auto 12px' }} />
                     <p>Loading payslips...</p>
                   </td>
                 </tr>
               ) : visiblePayslips.length === 0 ? (
                 <tr>
-                  <td colSpan={isHR ? 8 : 7}>
+                  <td colSpan={8}>
                     <div className="empty-table-state">
                       <Banknote size={40} style={{ opacity: 0.4 }} />
                       <p>No payslips match the current filters.</p>
@@ -546,9 +619,27 @@ export default function Payroll() {
                           {formatMoney(slip.net_pay, slip.currency)}
                         </span>
                       </td>
-                      {isHR && (
-                        <td>
-                          <div className="table-actions">
+                      <td>
+                        <div className="table-actions">
+                          <button
+                            onClick={() => handleDownloadPdf(slip)}
+                            className="action-icon-btn"
+                            disabled={busyId === `pdf-${slip.id}`}
+                            title="Download Official PDF Payslip"
+                          >
+                            {busyId === `pdf-${slip.id}` ? <Loader2 size={15} /> : <FileDown size={15} />}
+                          </button>
+                          {isHR && (
+                            <button
+                              onClick={() => handleSendEmail(slip)}
+                              className="action-icon-btn"
+                              disabled={busyId === `email-${slip.id}`}
+                              title="Email PDF Payslip to Employee"
+                            >
+                              {busyId === `email-${slip.id}` ? <Loader2 size={15} /> : <Send size={15} />}
+                            </button>
+                          )}
+                          {isHR && (
                             <button
                               onClick={() => handleDelete(slip)}
                               className="action-icon-btn btn-delete"
@@ -557,9 +648,9 @@ export default function Payroll() {
                             >
                               {busyId === slip.id ? <Loader2 size={15} /> : <Trash2 size={15} />}
                             </button>
-                          </div>
-                        </td>
-                      )}
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })

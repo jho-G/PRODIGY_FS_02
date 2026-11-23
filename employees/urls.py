@@ -4,6 +4,8 @@ from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
 
 from .views import (
     AttendanceViewSet,
+    CalendarFeedAPIView,
+    CalendarTokenAPIView,
     CurrentUserAPIView,
     DepartmentViewSet,
     EmployeeDocumentViewSet,
@@ -51,6 +53,19 @@ urlpatterns = [
     path("auth/me/", MeAPIView.as_view(), name="api_me"),
     # Raw Django user object (id, username, email, role)
     path("auth/user/", CurrentUserAPIView.as_view(), name="api_user"),
+    # -----------------------------------------------------------------------
+    # Calendar subscription (.ics / RFC 5545) endpoints
+    # -----------------------------------------------------------------------
+    path(
+        "calendar/feed/<str:token>/",
+        CalendarFeedAPIView.as_view(),
+        name="calendar_feed",
+    ),
+    path(
+        "calendar/token/",
+        CalendarTokenAPIView.as_view(),
+        name="calendar_token",
+    ),
     # DRF Router endpoints (/api/departments/, /api/employees/, etc.)
     path("", include(router.urls)),
 ]
