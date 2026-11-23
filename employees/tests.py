@@ -2389,3 +2389,180 @@ class InfrastructureScriptTests(APITestCase):
         self.assertIn("chmod 600", content)
         self.assertIn("chmod 644", content)
         self.assertIn("DOMAIN=", content)
+
+
+class PayslipPDFAndEmailTests(APITestCase):
+    """Unit tests for PDF generation and email delivery of payslips."""
+
+    def setUp(self):
+        self.admin = _user_with_role("hr_admin", "ADMIN")
+        self.dept = Department.objects.create(name="Finance")
+        self.emp = _make_employee(
+            "EMP-PAY-01",
+            department=self.dept,
+            salary=60000,
+            email="emp.pay@example.com",
+        )
+        self.emp_user = _user_with_role("emp_pay", "EMPLOYEE", employee=self.emp)
+        self.payslip = Payslip.objects.create(
+            employee=self.emp,
+            period_year=2026,
+            period_month=11,
+            basic_salary=5000,
+            allowances=500,
+            bonus=250,
+            tax_deduction=700,
+            other_deductions=50,
+            currency="USD",
+        )
+
+    def test_payslip_pdf_generation_binary(self):
+        from employees.services.payslip_pdf import generate_payslip_pdf
+
+        pdf_bytes = generate_payslip_pdf(self.payslip)
+        self.assertIsInstance(pdf_bytes, bytes)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertGreater(len(pdf_bytes), 1000)
+
+    def test_payslip_pdf_endpoint_success(self):
+        self.client.force_authenticate(user=self.emp_user)
+        resp = self.client.get(f"/api/payslips/{self.payslip.id}/pdf/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+        self.assertIn("attachment;", resp["Content-Disposition"])
+
+    def test_payslip_send_email_success(self):
+        from django.core import mail
+
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.post(f"/api/payslips/{self.payslip.id}/send_email/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["emp.pay@example.com"])
+        self.assertEqual(len(mail.outbox[0].attachments), 1)
+
+    def test_payslip_batch_email_success(self):
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.post(
+            "/api/payslips/batch_email/",
+            {"year": 2026, "month": 11},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(resp.data["sent"], 1)
+
+
+class CalendarFeedTests(APITestCase):
+    """Unit tests for iCalendar feed generation and subscription tokens."""
+
+    def setUp(self):
+        self.emp = _make_employee("EMP-CAL-01", email="cal.emp@example.com")
+        self.user = _user_with_role("cal_user", "EMPLOYEE", employee=self.emp)
+        self.holiday = Holiday.objects.create(name="New Year", date=date(2027, 1, 1))
+        self.leave = LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="VL",
+            start_date=date(2027, 1, 5),
+            end_date=date(2027, 1, 8),
+            reason="Vacation trip",
+            status="APPROVED",
+        )
+
+    def test_calendar_token_endpoint(self):
+        self.client.force_authenticate(user=self.user)
+        resp = self.client.get("/api/calendar/token/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn("calendar_token", resp.data)
+        self.assertIn("feed_url", resp.data)
+        self.assertIn("webcal_url", resp.data)
+
+    def test_calendar_token_regeneration(self):
+        self.client.force_authenticate(user=self.user)
+        resp1 = self.client.get("/api/calendar/token/")
+        old_token = resp1.data["calendar_token"]
+
+        resp2 = self.client.post("/api/calendar/token/")
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        new_token = resp2.data["calendar_token"]
+        self.assertNotEqual(old_token, new_token)
+
+    def test_calendar_feed_returns_valid_ics(self):
+        token = self.user.profile.get_or_create_calendar_token()
+        # Unauthenticated calendar client polling feed
+        resp = self.client.get(f"/api/calendar/feed/{token}/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn("text/calendar", resp["Content-Type"])
+        content = resp.content.decode("utf-8")
+        self.assertIn("BEGIN:VCALENDAR", content)
+        self.assertIn("Holiday: New Year", content)
+        self.assertIn("Leave:", content)
+        self.assertIn("END:VCALENDAR", content)
+
+    def test_calendar_feed_with_invalid_token_returns_404(self):
+        resp = self.client.get("/api/calendar/feed/non-existent-token/")
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class ExportServiceTests(APITestCase):
+    """Unit tests for CSV and Excel dataset exports."""
+
+    def setUp(self):
+        self.admin = _user_with_role("export_admin", "ADMIN")
+        self.dept = Department.objects.create(name="Technology")
+        self.emp = _make_employee("EMP-EXP-01", department=self.dept, salary=90000)
+        self.client.force_authenticate(user=self.admin)
+
+    def test_payslips_export_csv_and_xlsx(self):
+        Payslip.objects.create(
+            employee=self.emp,
+            period_year=2026,
+            period_month=10,
+            basic_salary=7500,
+        )
+        resp_csv = self.client.get("/api/payslips/export/?format=csv")
+        self.assertEqual(resp_csv.status_code, status.HTTP_200_OK)
+        self.assertIn("text/csv", resp_csv["Content-Type"])
+
+        resp_xlsx = self.client.get("/api/payslips/export/?format=xlsx")
+        self.assertEqual(resp_xlsx.status_code, status.HTTP_200_OK)
+        self.assertIn("spreadsheetml", resp_xlsx["Content-Type"])
+
+    def test_attendance_export_csv_and_xlsx(self):
+        AttendanceRecord.objects.create(
+            employee=self.emp,
+            date=date.today(),
+            status="PRESENT",
+        )
+        resp_csv = self.client.get("/api/attendance/export/?format=csv")
+        self.assertEqual(resp_csv.status_code, status.HTTP_200_OK)
+        self.assertIn("text/csv", resp_csv["Content-Type"])
+
+        resp_xlsx = self.client.get("/api/attendance/export/?format=xlsx")
+        self.assertEqual(resp_xlsx.status_code, status.HTTP_200_OK)
+        self.assertIn("spreadsheetml", resp_xlsx["Content-Type"])
+
+    def test_leaves_export_csv_and_xlsx(self):
+        LeaveRequest.objects.create(
+            employee=self.emp,
+            leave_type="SL",
+            start_date=date.today(),
+            end_date=date.today(),
+            reason="Sick recovery",
+            status="PENDING",
+        )
+        resp_csv = self.client.get("/api/leaves/export/?format=csv")
+        self.assertEqual(resp_csv.status_code, status.HTTP_200_OK)
+        self.assertIn("text/csv", resp_csv["Content-Type"])
+
+        resp_xlsx = self.client.get("/api/leaves/export/?format=xlsx")
+        self.assertEqual(resp_xlsx.status_code, status.HTTP_200_OK)
+        self.assertIn("spreadsheetml", resp_xlsx["Content-Type"])
+
+    def test_departments_headcount_export(self):
+        resp_csv = self.client.get("/api/departments/export/?format=csv")
+        self.assertEqual(resp_csv.status_code, status.HTTP_200_OK)
+        self.assertIn("text/csv", resp_csv["Content-Type"])
+
+        resp_xlsx = self.client.get("/api/departments/export/?format=xlsx")
+        self.assertEqual(resp_xlsx.status_code, status.HTTP_200_OK)
+        self.assertIn("spreadsheetml", resp_xlsx["Content-Type"])

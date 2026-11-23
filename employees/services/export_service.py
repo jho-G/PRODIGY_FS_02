@@ -105,7 +105,7 @@ def export_dataset_response(
 
     # Default: CSV format
     filename = f"{filename_prefix}_{timestamp}.csv"
-    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
     # Add UTF-8 BOM so Excel opens CSV without encoding issues

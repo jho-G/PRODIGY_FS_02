@@ -213,6 +213,8 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
     # Human-readable datetime format in responses
     "DATETIME_FORMAT": "%Y-%m-%dT%H:%M:%SZ",
+    # Allow file export parameters (?format=csv, ?format=xlsx) without 404
+    "DEFAULT_CONTENT_NEGOTIATION_CLASS": "employees.services.negotiation.FlexibleContentNegotiation",
 }
 
 # ---------------------------------------------------------------------------

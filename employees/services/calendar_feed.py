@@ -1,6 +1,6 @@
 """Service to generate RFC 5545 compliant iCalendar (.ics) feeds."""
 
-from datetime import timedelta
+from datetime import UTC, timedelta
 
 from django.utils import timezone
 
@@ -13,8 +13,8 @@ def _format_date(d):
 def _format_datetime(dt):
     """Format datetime in UTC for iCalendar (YYYYMMDDTHHMMSSZ)."""
     if timezone.is_naive(dt):
-        dt = timezone.make_aware(dt, timezone.utc)
-    utc_dt = dt.astimezone(timezone.utc)
+        dt = timezone.make_aware(dt, UTC)
+    utc_dt = dt.astimezone(UTC)
     return utc_dt.strftime("%Y%m%dT%H%M%SZ")
 
 
@@ -83,10 +83,11 @@ def generate_icalendar_feed(profile, holidays, leaves, reviews=None) -> str:
         emp_name = leave.employee.full_name
         leave_type_label = leave.get_leave_type_display()
         summary = _escape_text(f"Leave: {emp_name} ({leave_type_label})")
+        leave_days_count = getattr(leave, "leave_days", getattr(leave, "days_count", 0))
         desc = _escape_text(
             f"Employee: {emp_name} ({leave.employee.employee_id})\\n"
             f"Type: {leave_type_label}\\n"
-            f"Working Days: {leave.days}\\n"
+            f"Working Days: {leave_days_count}\\n"
             f"Reason: {leave.reason}"
         )
         uid = f"leave-{leave.id}-{leave.start_date}@ems"

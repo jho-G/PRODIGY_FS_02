@@ -995,7 +995,7 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
                 leave.get_leave_type_display(),
                 leave.start_date.strftime("%Y-%m-%d"),
                 leave.end_date.strftime("%Y-%m-%d"),
-                leave.days,
+                getattr(leave, "leave_days", getattr(leave, "days_count", 0)),
                 leave.get_status_display(),
                 leave.reason or "",
             ]
