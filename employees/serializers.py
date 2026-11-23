@@ -13,8 +13,12 @@ from .models import (
     Holiday,
     LeaveRequest,
     Notification,
+    OfficeLocation,
+    OvertimeRecord,
     Payslip,
     PerformanceReview,
+    Shift,
+    ShiftAssignment,
     working_days_between,
 )
 from .permissions import get_role, is_hr_or_above
@@ -276,6 +280,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             "effective_experience_years",
             "annual_leave_days",
             "annual_leave_remaining",
+            "comp_off_days",
             "created_by",
             "created_by_username",
             "created_at",
@@ -289,6 +294,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             "years_of_service",
             "effective_experience_years",
             "annual_leave_remaining",
+            "comp_off_days",
             "department_name",
             "department_detail",
             "created_by",
@@ -460,6 +466,9 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     employee_id_code = serializers.CharField(
         source="employee.employee_id", read_only=True
     )
+    shift_name = serializers.CharField(source="shift.name", read_only=True)
+    shift_code = serializers.CharField(source="shift.code", read_only=True)
+    shift_color = serializers.CharField(source="shift.color", read_only=True)
     work_hours = serializers.ReadOnlyField()
 
     class Meta:
@@ -469,16 +478,34 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             "employee",
             "employee_name",
             "employee_id_code",
+            "shift",
+            "shift_name",
+            "shift_code",
+            "shift_color",
             "date",
             "status",
             "check_in",
             "check_out",
+            "punch_in_latitude",
+            "punch_in_longitude",
+            "punch_in_ip",
+            "is_geofence_verified",
+            "is_flagged",
+            "flag_reason",
             "work_hours",
             "notes",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "work_hours", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "work_hours",
+            "is_geofence_verified",
+            "is_flagged",
+            "flag_reason",
+            "created_at",
+            "updated_at",
+        ]
 
     def validate(self, attrs):
         check_in = attrs.get("check_in")
@@ -578,6 +605,7 @@ class PayslipSerializer(serializers.ModelSerializer):
             "basic_salary",
             "allowances",
             "bonus",
+            "overtime_pay",
             "tax_deduction",
             "other_deductions",
             "gross_pay",
@@ -593,4 +621,129 @@ class PayslipSerializer(serializers.ModelSerializer):
             "total_deductions",
             "net_pay",
             "generated_at",
+        ]
+
+
+class ShiftSerializer(serializers.ModelSerializer):
+    department_name = serializers.CharField(source="department.name", read_only=True)
+    assigned_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Shift
+        fields = [
+            "id",
+            "name",
+            "code",
+            "start_time",
+            "end_time",
+            "grace_period_minutes",
+            "department",
+            "department_name",
+            "is_default",
+            "color",
+            "description",
+            "assigned_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "assigned_count", "created_at", "updated_at"]
+
+    def get_assigned_count(self, obj):
+        return obj.assignments.filter(is_active=True).count()
+
+
+class ShiftAssignmentSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source="employee.full_name", read_only=True)
+    employee_id_code = serializers.CharField(
+        source="employee.employee_id", read_only=True
+    )
+    shift_name = serializers.CharField(source="shift.name", read_only=True)
+    shift_code = serializers.CharField(source="shift.code", read_only=True)
+    shift_color = serializers.CharField(source="shift.color", read_only=True)
+    shift_start_time = serializers.TimeField(source="shift.start_time", read_only=True)
+    shift_end_time = serializers.TimeField(source="shift.end_time", read_only=True)
+
+    class Meta:
+        model = ShiftAssignment
+        fields = [
+            "id",
+            "employee",
+            "employee_name",
+            "employee_id_code",
+            "shift",
+            "shift_name",
+            "shift_code",
+            "shift_color",
+            "shift_start_time",
+            "shift_end_time",
+            "start_date",
+            "end_date",
+            "is_active",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
+class OfficeLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OfficeLocation
+        fields = [
+            "id",
+            "name",
+            "address",
+            "latitude",
+            "longitude",
+            "radius_meters",
+            "allowed_ip_ranges",
+            "is_active",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
+class OvertimeRecordSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source="employee.full_name", read_only=True)
+    employee_id_code = serializers.CharField(
+        source="employee.employee_id", read_only=True
+    )
+    approved_by_username = serializers.CharField(
+        source="approved_by.username", read_only=True
+    )
+    compensation_type_display = serializers.CharField(
+        source="get_compensation_type_display", read_only=True
+    )
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = OvertimeRecord
+        fields = [
+            "id",
+            "employee",
+            "employee_name",
+            "employee_id_code",
+            "attendance_record",
+            "date",
+            "hours",
+            "rate_multiplier",
+            "compensation_type",
+            "compensation_type_display",
+            "status",
+            "status_display",
+            "reason",
+            "approved_by",
+            "approved_by_username",
+            "approved_at",
+            "is_processed",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "approved_by",
+            "approved_by_username",
+            "approved_at",
+            "is_processed",
+            "created_at",
+            "updated_at",
         ]

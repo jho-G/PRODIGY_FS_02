@@ -17,8 +17,12 @@ from .views import (
     LogoutAPIView,
     MeAPIView,
     NotificationViewSet,
+    OfficeLocationViewSet,
+    OvertimeRecordViewSet,
     PayslipViewSet,
     PerformanceReviewViewSet,
+    ShiftAssignmentViewSet,
+    ShiftViewSet,
 )
 
 router = DefaultRouter()
@@ -32,6 +36,12 @@ router.register(r"departments", DepartmentViewSet, basename="department")
 router.register(r"employees", EmployeeViewSet, basename="employee")
 router.register(r"leaves", LeaveRequestViewSet, basename="leave")
 router.register(r"attendance", AttendanceViewSet, basename="attendance")
+router.register(r"shifts", ShiftViewSet, basename="shift")
+router.register(
+    r"shift-assignments", ShiftAssignmentViewSet, basename="shift-assignment"
+)
+router.register(r"office-locations", OfficeLocationViewSet, basename="office-location")
+router.register(r"overtime", OvertimeRecordViewSet, basename="overtime")
 router.register(r"payslips", PayslipViewSet, basename="payslip")
 router.register(
     r"performance-reviews", PerformanceReviewViewSet, basename="performance-review"

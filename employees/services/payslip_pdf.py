@@ -239,6 +239,14 @@ def generate_payslip_pdf(payslip) -> bytes:
             Paragraph(f"{curr} 0.00", cell_amount),
         ],
         [
+            Paragraph("Approved Overtime Compensation", cell_normal),
+            Paragraph(
+                f"{curr} {getattr(payslip, 'overtime_pay', 0):,.2f}", cell_amount
+            ),
+            Paragraph("—", cell_normal),
+            Paragraph(f"{curr} 0.00", cell_amount),
+        ],
+        [
             Paragraph("<b>Gross Earnings</b>", cell_bold),
             Paragraph(f"<b>{curr} {payslip.gross_pay:,.2f}</b>", cell_amount_bold),
             Paragraph("<b>Total Deductions</b>", cell_bold),
