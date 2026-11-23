@@ -156,6 +156,13 @@ class Employee(models.Model):
 
     # Leave entitlement
     annual_leave_days = models.PositiveIntegerField(default=20)
+    comp_off_days = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        help_text="Accumulated compensatory leave days earned from approved overtime",
+    )
 
     # System Fields
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
@@ -256,6 +263,7 @@ class LeaveRequest(models.Model):
         ("PL", "Personal"),
         ("ML", "Maternity/Paternity"),
         ("UL", "Unpaid"),
+        ("CO", "Compensatory Off"),
     ]
 
     STATUS_CHOICES = [
@@ -317,9 +325,120 @@ class LeaveRequest(models.Model):
         return self.status == "APPROVED" and self.start_date <= today <= self.end_date
 
 
+class Shift(models.Model):
+    """
+    Work shift schedule definitions with configurable start/end times and grace periods.
+    """
+
+    name = models.CharField(max_length=64, unique=True)
+    code = models.CharField(max_length=20, unique=True, blank=True)
+    start_time = models.TimeField(default=datetime_time(9, 0))
+    end_time = models.TimeField(default=datetime_time(17, 0))
+    grace_period_minutes = models.PositiveIntegerField(
+        default=15,
+        help_text="Grace window in minutes before punch-in is flagged as LATE",
+    )
+    department = models.ForeignKey(
+        "Department",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shifts",
+        help_text="Department restriction; leave blank for company-wide shift",
+    )
+    is_default = models.BooleanField(
+        default=False,
+        help_text="Default shift applied when no specific assignment exists",
+    )
+    color = models.CharField(
+        max_length=20,
+        default="#000000",
+        help_text="Hex badge color (e.g. #000000 or #555555)",
+    )
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["start_time", "name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.start_time.strftime('%H:%M')} - {self.end_time.strftime('%H:%M')})"
+
+    def save(self, *args, **kwargs):
+        if not self.code and self.name:
+            import re
+
+            self.code = re.sub(r"[^A-Za-z0-9]+", "_", self.name).upper()[:20]
+        super().save(*args, **kwargs)
+
+    def get_late_cutoff(self):
+        """Returns the latest time (datetime.time) an employee can check in without being LATE."""
+        dummy_dt = datetime.combine(date.today(), self.start_time) + timedelta(
+            minutes=self.grace_period_minutes
+        )
+        return dummy_dt.time()
+
+
+class ShiftAssignment(models.Model):
+    """
+    Assigns an employee to a specific recurring or seasonal work shift.
+    """
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name="shift_assignments"
+    )
+    shift = models.ForeignKey(
+        Shift, on_delete=models.CASCADE, related_name="assignments"
+    )
+    start_date = models.DateField(default=date.today)
+    end_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Null for ongoing or indefinite shift assignments",
+    )
+    is_active = models.BooleanField(default=True)
+    notes = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-start_date"]
+
+    def __str__(self):
+        return f"{self.employee} -> {self.shift} ({self.start_date} to {self.end_date or 'Indefinite'})"
+
+
+class OfficeLocation(models.Model):
+    """
+    Registered office premises coordinates and allowed IP subnets for geofenced clock-in.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    address = models.CharField(max_length=255, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    radius_meters = models.PositiveIntegerField(
+        default=200,
+        help_text="Allowable radius in meters around the office coordinates",
+    )
+    allowed_ip_ranges = models.TextField(
+        blank=True,
+        help_text="Comma-separated IP addresses or CIDR blocks (e.g. 192.168.1.0/24, 10.0.0.1)",
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.radius_meters}m radius)"
+
+
 class AttendanceRecord(models.Model):
     """
-    Daily attendance log per employee with check-in/check-out times.
+    Daily attendance log per employee with check-in/check-out times,
+    assigned shift, and geofence verification tracking.
     """
 
     STATUS_CHOICES = [
@@ -330,15 +449,32 @@ class AttendanceRecord(models.Model):
         ("REMOTE", "Remote"),
     ]
 
-    LATE_CUTOFF = datetime_time(9, 0)  # arrivals after 09:00 count as late
+    LATE_CUTOFF = datetime_time(9, 0)  # standard fallback when no shift is assigned
 
     employee = models.ForeignKey(
         Employee, on_delete=models.CASCADE, related_name="attendance_records"
+    )
+    shift = models.ForeignKey(
+        Shift,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="attendance_records",
     )
     date = models.DateField(default=date.today)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="PRESENT")
     check_in = models.TimeField(null=True, blank=True)
     check_out = models.TimeField(null=True, blank=True)
+    punch_in_latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    punch_in_longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    punch_in_ip = models.GenericIPAddressField(null=True, blank=True)
+    is_geofence_verified = models.BooleanField(default=False)
+    is_flagged = models.BooleanField(default=False)
+    flag_reason = models.CharField(max_length=255, blank=True)
     notes = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -348,13 +484,41 @@ class AttendanceRecord(models.Model):
         unique_together = ("employee", "date")
 
     def save(self, *args, **kwargs):
-        # Auto-flag late arrivals when a check-in exists but no explicit status
-        if (
-            self.check_in
-            and self.status == "PRESENT"
-            and self.check_in > self.LATE_CUTOFF
-        ):
-            self.status = "LATE"
+        # Resolve active shift for employee if not explicitly bound
+        if not self.shift_id and self.employee_id:
+            assignment = (
+                ShiftAssignment.objects.filter(
+                    employee_id=self.employee_id,
+                    is_active=True,
+                    start_date__lte=self.date,
+                )
+                .filter(
+                    models.Q(end_date__isnull=True) | models.Q(end_date__gte=self.date)
+                )
+                .order_by("-start_date")
+                .first()
+            )
+            if assignment:
+                self.shift = assignment.shift
+            else:
+                emp = getattr(self, "employee", None)
+                dept = emp.department if emp else None
+                default_shift = (
+                    Shift.objects.filter(department=dept, is_default=True).first()
+                    if dept
+                    else None
+                ) or Shift.objects.filter(
+                    department__isnull=True, is_default=True
+                ).first()
+                if default_shift:
+                    self.shift = default_shift
+
+        # Auto-flag late arrivals based on shift schedule (or standard 09:00 LATE_CUTOFF)
+        if self.check_in and self.status == "PRESENT":
+            cutoff = self.shift.get_late_cutoff() if self.shift else self.LATE_CUTOFF
+            if self.check_in > cutoff:
+                self.status = "LATE"
+
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -369,6 +533,79 @@ class AttendanceRecord(models.Model):
             date.min, self.check_in
         )
         return round(max(delta.total_seconds() / 3600, 0), 2)
+
+
+class OvertimeRecord(models.Model):
+    """
+    Overtime hours logged past regular shift with manager approval and payout/comp-off resolution.
+    """
+
+    COMPENSATION_CHOICES = [
+        ("PAYOUT", "Payroll Payout"),
+        ("COMP_OFF", "Compensatory Leave"),
+    ]
+    STATUS_CHOICES = [
+        ("PENDING", "Pending"),
+        ("APPROVED", "Approved"),
+        ("REJECTED", "Rejected"),
+    ]
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name="overtime_records"
+    )
+    attendance_record = models.ForeignKey(
+        AttendanceRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="overtime_records",
+    )
+    date = models.DateField(default=date.today)
+    hours = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        validators=[
+            MinValueValidator(Decimal("0.25")),
+            MaxValueValidator(Decimal("24.00")),
+        ],
+    )
+    rate_multiplier = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        default=Decimal("1.50"),
+        help_text="Standard overtime multiplier (e.g. 1.5x or 2.0x for holidays)",
+    )
+    compensation_type = models.CharField(
+        max_length=10,
+        choices=COMPENSATION_CHOICES,
+        default="PAYOUT",
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default="PENDING",
+    )
+    reason = models.TextField(blank=True)
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_overtime_records",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    is_processed = models.BooleanField(
+        default=False,
+        help_text="True when paid out in payslip or credited to comp-off leave balance",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-created_at"]
+
+    def __str__(self):
+        return f"{self.employee} - {self.date} ({self.hours} hrs, {self.status})"
 
 
 class Payslip(models.Model):
@@ -399,6 +636,13 @@ class Payslip(models.Model):
         default=0,
         validators=[MinValueValidator(0)],
     )
+    overtime_pay = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(0)],
+        help_text="Calculated overtime pay from approved overtime records",
+    )
     tax_deduction = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -417,7 +661,7 @@ class Payslip(models.Model):
         decimal_places=2,
         default=0,
         validators=[MinValueValidator(0)],
-        help_text="Gross (basic + allowances + bonus) minus deductions",
+        help_text="Gross (basic + allowances + bonus + overtime) minus deductions",
     )
     currency = models.CharField(max_length=3, default="USD")
     notes = models.CharField(max_length=255, blank=True)
@@ -429,12 +673,15 @@ class Payslip(models.Model):
 
     def save(self, *args, **kwargs):
         # Derive net pay server-side so clients can't send inconsistent totals.
-        # Coerce to Decimal first: in-memory attrs may hold raw ints/floats,
-        # which would leave net_pay as an int and lose cent-level precision.
         def _dec(value):
             return value if isinstance(value, Decimal) else Decimal(str(value or 0))
 
-        gross = _dec(self.basic_salary) + _dec(self.allowances) + _dec(self.bonus)
+        gross = (
+            _dec(self.basic_salary)
+            + _dec(self.allowances)
+            + _dec(self.bonus)
+            + _dec(self.overtime_pay)
+        )
         deductions = _dec(self.tax_deduction) + _dec(self.other_deductions)
         self.net_pay = (gross - deductions).quantize(Decimal("0.01"))
         super().save(*args, **kwargs)
@@ -444,7 +691,12 @@ class Payslip(models.Model):
 
     @property
     def gross_pay(self):
-        return (self.basic_salary or 0) + (self.allowances or 0) + (self.bonus or 0)
+        return (
+            (self.basic_salary or 0)
+            + (self.allowances or 0)
+            + (self.bonus or 0)
+            + (self.overtime_pay or 0)
+        )
 
     @property
     def total_deductions(self):
