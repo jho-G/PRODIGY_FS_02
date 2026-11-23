@@ -257,6 +257,14 @@ export const leaveApi = {
     const response = await api.post(`leaves/${id}/cancel/`);
     return response.data;
   },
+  // Export leave requests as CSV or Excel (params: { format: 'csv' | 'xlsx', status, ... })
+  export: async (params = {}) => {
+    const response = await api.get('leaves/export/', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
+  },
 };
 
 /**
@@ -317,6 +325,14 @@ export const attendanceApi = {
     const response = await api.get('attendance/summary/', { params });
     return response.data;
   },
+  // Export attendance records as CSV or Excel (params: { format: 'csv' | 'xlsx', ... })
+  export: async (params = {}) => {
+    const response = await api.get('attendance/export/', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
+  },
 };
 
 /**
@@ -354,10 +370,34 @@ export const payrollApi = {
     const response = await api.get('payslips/summary/', { params });
     return response.data;
   },
-  // Downloads the filtered payslip set as a CSV file
-  exportCsv: async (params = {}) => {
+  // Downloads official PDF payslip as blob
+  downloadPdf: async (id) => {
+    const response = await api.get(`payslips/${id}/pdf/`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+  // Email single payslip directly to employee
+  sendEmail: async (id) => {
+    const response = await api.post(`payslips/${id}/send_email/`);
+    return response.data;
+  },
+  // Batch-email payslips for a given period to all employees
+  batchEmail: async ({ year, month }) => {
+    const response = await api.post('payslips/batch_email/', { year, month });
+    return response.data;
+  },
+  // Downloads the filtered payslip set as CSV or Excel file
+  export: async (params = {}) => {
     const response = await api.get('payslips/export/', {
       params,
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+  exportCsv: async (params = {}) => {
+    const response = await api.get('payslips/export/', {
+      params: { ...params, format: 'csv' },
       responseType: 'blob',
     });
     return response.data;
@@ -399,6 +439,20 @@ export const performanceApi = {
   },
   getSummary: async () => {
     const response = await api.get('performance-reviews/summary/');
+    return response.data;
+  },
+};
+
+/**
+ * Calendar Synchronization Endpoints (.ics / Webcal)
+ */
+export const calendarApi = {
+  getToken: async () => {
+    const response = await api.get('calendar/token/');
+    return response.data;
+  },
+  regenerateToken: async () => {
+    const response = await api.post('calendar/token/');
     return response.data;
   },
 };
