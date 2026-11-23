@@ -280,6 +280,44 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     search_fields = ["name", "description"]
     ordering_fields = ["name", "id"]
 
+    @action(detail=False, methods=["get"], url_path="export")
+    def export(self, request):
+        """Export departmental summary report as CSV or Excel."""
+        from employees.services.export_service import export_dataset_response
+
+        fmt = request.query_params.get("format", "csv")
+        departments = self.get_queryset().annotate(
+            emp_count=Count("employee", filter=Q(employee__is_active=True)),
+            total_salary=Sum("employee__salary", filter=Q(employee__is_active=True)),
+            avg_salary=Avg("employee__salary", filter=Q(employee__is_active=True)),
+        )
+        headers = [
+            "Department ID",
+            "Department Name",
+            "Active Employees",
+            "Total Annual Payroll",
+            "Average Annual Salary",
+            "Description",
+        ]
+        rows = [
+            [
+                d.id,
+                d.name,
+                d.emp_count,
+                float(d.total_salary or 0),
+                float(round(d.avg_salary or 0, 2)),
+                d.description or "",
+            ]
+            for d in departments
+        ]
+        return export_dataset_response(
+            headers=headers,
+            rows=rows,
+            filename_prefix="department_headcount",
+            export_format=fmt,
+            sheet_title="Departments",
+        )
+
 
 class HolidayViewSet(viewsets.ModelViewSet):
     """
@@ -927,6 +965,50 @@ class LeaveRequestViewSet(viewsets.ModelViewSet):
         notify_leave_decision(leave)
         return Response(LeaveRequestSerializer(leave).data, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=["get"], url_path="export")
+    def export(self, request):
+        """Export leave requests dataset as CSV or Excel."""
+        from employees.services.export_service import export_dataset_response
+
+        fmt = request.query_params.get("format", "csv")
+        leaves = self.get_queryset().select_related("employee", "employee__department")
+        headers = [
+            "Leave ID",
+            "Employee ID",
+            "Employee Name",
+            "Department",
+            "Leave Type",
+            "Start Date",
+            "End Date",
+            "Working Days",
+            "Status",
+            "Reason",
+        ]
+        rows = [
+            [
+                leave.id,
+                leave.employee.employee_id,
+                leave.employee.full_name,
+                leave.employee.department.name
+                if leave.employee.department
+                else "Unassigned",
+                leave.get_leave_type_display(),
+                leave.start_date.strftime("%Y-%m-%d"),
+                leave.end_date.strftime("%Y-%m-%d"),
+                leave.days,
+                leave.get_status_display(),
+                leave.reason or "",
+            ]
+            for leave in leaves
+        ]
+        return export_dataset_response(
+            headers=headers,
+            rows=rows,
+            filename_prefix="leave_requests",
+            export_format=fmt,
+            sheet_title="Leaves",
+        )
+
 
 class AttendanceViewSet(viewsets.ModelViewSet):
     """
@@ -1227,6 +1309,46 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         summary.sort(key=lambda r: r["employee_name"])
         return Response({"year": year, "month": month, "summary": summary})
 
+    @action(detail=False, methods=["get"], url_path="export")
+    def export(self, request):
+        """Export attendance records dataset as CSV or Excel."""
+        from employees.services.export_service import export_dataset_response
+
+        fmt = request.query_params.get("format", "csv")
+        records = self.get_queryset().select_related("employee", "employee__department")
+        headers = [
+            "Record ID",
+            "Date",
+            "Employee ID",
+            "Employee Name",
+            "Department",
+            "Status",
+            "Check In",
+            "Check Out",
+            "Notes",
+        ]
+        rows = [
+            [
+                r.id,
+                r.date.strftime("%Y-%m-%d"),
+                r.employee.employee_id,
+                r.employee.full_name,
+                r.employee.department.name if r.employee.department else "Unassigned",
+                r.get_status_display(),
+                r.check_in.strftime("%H:%M:%S") if r.check_in else "",
+                r.check_out.strftime("%H:%M:%S") if r.check_out else "",
+                r.notes or "",
+            ]
+            for r in records
+        ]
+        return export_dataset_response(
+            headers=headers,
+            rows=rows,
+            filename_prefix="attendance_records",
+            export_format=fmt,
+            sheet_title="Attendance",
+        )
+
 
 class PayslipViewSet(viewsets.ModelViewSet):
     """
@@ -1248,6 +1370,8 @@ class PayslipViewSet(viewsets.ModelViewSet):
             "destroy",
             "generate",
             "summary",
+            "send_email",
+            "batch_email",
         ]:
             return [permissions.IsAuthenticated(), IsHROrAdmin()]
         return [permissions.IsAuthenticated()]
@@ -1339,56 +1463,185 @@ class PayslipViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="export")
     def export(self, request):
-        """Export payslips (filtered by year/month/department) as CSV."""
-        import csv
+        """Export payslips (filtered by year/month/department) as CSV or Excel."""
+        from employees.services.export_service import export_dataset_response
 
+        fmt = request.query_params.get("format", "csv")
         payslips = self.get_queryset().order_by(
             "period_year", "period_month", "employee__employee_id"
         )
-
-        response = HttpResponse(content_type="text/csv")
-        filename = f"payroll_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        response["Content-Disposition"] = f'attachment; filename="{filename}"'
-
-        writer = csv.writer(response)
-        writer.writerow(
+        headers = [
+            "Employee ID",
+            "Employee Name",
+            "Department",
+            "Period",
+            "Basic Salary",
+            "Allowances",
+            "Bonus",
+            "Gross Pay",
+            "Tax",
+            "Other Deductions",
+            "Total Deductions",
+            "Net Pay",
+            "Currency",
+            "Generated At",
+        ]
+        rows = [
             [
-                "Employee ID",
-                "Employee Name",
-                "Department",
-                "Period",
-                "Basic Salary",
-                "Allowances",
-                "Bonus",
-                "Gross Pay",
-                "Tax",
-                "Other Deductions",
-                "Total Deductions",
-                "Net Pay",
-                "Currency",
-                "Generated At",
+                slip.employee.employee_id,
+                slip.employee.full_name,
+                slip.employee.department.name
+                if slip.employee.department
+                else "Unassigned",
+                slip.period_label,
+                float(slip.basic_salary),
+                float(slip.allowances),
+                float(slip.bonus),
+                float(slip.gross_pay),
+                float(slip.tax_deduction),
+                float(slip.other_deductions),
+                float(slip.total_deductions),
+                float(slip.net_pay),
+                slip.currency,
+                slip.generated_at.strftime("%Y-%m-%d %H:%M"),
             ]
+            for slip in payslips
+        ]
+        return export_dataset_response(
+            headers=headers,
+            rows=rows,
+            filename_prefix="payroll_records",
+            export_format=fmt,
+            sheet_title="Payroll",
         )
-        for slip in payslips:
-            writer.writerow(
-                [
-                    slip.employee.employee_id,
-                    slip.employee.full_name,
-                    slip.employee.department.name if slip.employee.department else "",
-                    slip.period_label,
-                    slip.basic_salary,
-                    slip.allowances,
-                    slip.bonus,
-                    slip.gross_pay,
-                    slip.tax_deduction,
-                    slip.other_deductions,
-                    slip.total_deductions,
-                    slip.net_pay,
-                    slip.currency,
-                    slip.generated_at.strftime("%Y-%m-%d %H:%M"),
-                ]
-            )
+
+    @action(detail=True, methods=["get"], url_path="pdf")
+    def pdf(self, request, pk=None):
+        """Generate and stream a branded PDF version of the payslip."""
+        from employees.services.payslip_pdf import generate_payslip_pdf
+
+        payslip = self.get_object()
+        pdf_bytes = generate_payslip_pdf(payslip)
+        filename = f"payslip_{payslip.employee.employee_id}_{payslip.period_year}_{payslip.period_month:02d}.pdf"
+
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
+
+    @action(detail=True, methods=["post"], url_path="send_email")
+    def send_email(self, request, pk=None):
+        """Generate PDF and email payslip directly to the employee's registered email."""
+        from django.conf import settings
+        from django.core.mail import EmailMessage
+
+        from employees.services.payslip_pdf import generate_payslip_pdf
+
+        payslip = self.get_object()
+        employee = payslip.employee
+
+        if not employee.email:
+            return Response(
+                {
+                    "detail": f"Employee {employee.full_name} does not have an email address configured."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        pdf_bytes = generate_payslip_pdf(payslip)
+        filename = f"payslip_{employee.employee_id}_{payslip.period_year}_{payslip.period_month:02d}.pdf"
+        period_str = f"{payslip.period_year}-{payslip.period_month:02d}"
+
+        subject = f"Official Payslip for Period {period_str} — {employee.full_name}"
+        body = (
+            f"Dear {employee.first_name},\n\n"
+            f"Please find attached your official payslip for {period_str}.\n\n"
+            f"Gross Pay: {payslip.currency} {payslip.gross_pay:,.2f}\n"
+            f"Net Take-Home Pay: {payslip.currency} {payslip.net_pay:,.2f}\n\n"
+            "If you have any questions or discrepancies, please contact the HR & Payroll department.\n\n"
+            "Best regards,\n"
+            "Human Resources & Payroll Department"
+        )
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@company.com")
+        email = EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=from_email,
+            to=[employee.email],
+        )
+        email.attach(filename, pdf_bytes, "application/pdf")
+        email.send(fail_silently=False)
+
+        return Response(
+            {"detail": f"Payslip successfully emailed to {employee.email}."},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"], url_path="batch_email")
+    def batch_email(self, request):
+        """Batch-email generated payslips for a given year and month to all active employees."""
+        from django.conf import settings
+        from django.core.mail import EmailMessage
+
+        from employees.services.payslip_pdf import generate_payslip_pdf
+
+        try:
+            year = int(request.data.get("year"))
+            month = int(request.data.get("month"))
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "year and month must be provided as integers."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        payslips = self.get_queryset().filter(period_year=year, period_month=month)
+        if not payslips.exists():
+            return Response(
+                {"detail": f"No payslips found for {year}-{month:02d}."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        sent_count = 0
+        failed_count = 0
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@company.com")
+
+        for slip in payslips:
+            if not slip.employee.email:
+                failed_count += 1
+                continue
+            try:
+                pdf_bytes = generate_payslip_pdf(slip)
+                filename = f"payslip_{slip.employee.employee_id}_{year}_{month:02d}.pdf"
+                period_str = f"{year}-{month:02d}"
+                subject = f"Official Payslip for Period {period_str} — {slip.employee.full_name}"
+                body = (
+                    f"Dear {slip.employee.first_name},\n\n"
+                    f"Please find attached your official payslip for {period_str}.\n\n"
+                    f"Gross Pay: {slip.currency} {slip.gross_pay:,.2f}\n"
+                    f"Net Take-Home Pay: {slip.currency} {slip.net_pay:,.2f}\n\n"
+                    "Best regards,\n"
+                    "Human Resources & Payroll Department"
+                )
+                email = EmailMessage(
+                    subject=subject,
+                    body=body,
+                    from_email=from_email,
+                    to=[slip.employee.email],
+                )
+                email.attach(filename, pdf_bytes, "application/pdf")
+                email.send(fail_silently=True)
+                sent_count += 1
+            except Exception:
+                failed_count += 1
+
+        return Response(
+            {
+                "detail": f"Batch email processing completed for {year}-{month:02d}.",
+                "sent": sent_count,
+                "skipped_or_failed": failed_count,
+                "total": payslips.count(),
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=False, methods=["get"])
     def summary(self, request):
@@ -1656,5 +1909,125 @@ class PerformanceReviewViewSet(viewsets.ModelViewSet):
                 "distribution": distribution,
                 "top_performers": top_performers,
                 "department_averages": department_averages,
+            }
+        )
+
+
+class CalendarFeedAPIView(APIView):
+    """
+    Publicly accessible endpoint (authenticated by secure token)
+    for iCalendar (.ics) calendar synchronization (RFC 5545).
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, token):
+        from employees.models import (
+            Holiday,
+            LeaveRequest,
+            PerformanceReview,
+            UserProfile,
+        )
+        from employees.services.calendar_feed import generate_icalendar_feed
+
+        if not token:
+            raise Http404("Calendar feed token missing.")
+
+        try:
+            profile = UserProfile.objects.select_related("user", "employee").get(
+                calendar_token=token
+            )
+        except UserProfile.DoesNotExist:
+            raise Http404("Invalid calendar feed token.") from None
+
+        # Determine events based on role
+        holidays = Holiday.objects.all().order_by("date")
+
+        if profile.role in ["ADMIN", "HR"]:
+            leaves = LeaveRequest.objects.filter(status="APPROVED").select_related(
+                "employee"
+            )
+            reviews = PerformanceReview.objects.select_related("employee").all()
+        elif profile.role == "MANAGER":
+            emp = profile.employee
+            if emp:
+                leaves = LeaveRequest.objects.filter(
+                    Q(employee=emp) | Q(employee__manager=emp), status="APPROVED"
+                ).select_related("employee")
+            else:
+                leaves = LeaveRequest.objects.none()
+            reviews = PerformanceReview.objects.filter(
+                reviewer=profile.user
+            ).select_related("employee")
+        else:
+            emp = profile.employee
+            leaves = (
+                LeaveRequest.objects.filter(
+                    employee=emp, status="APPROVED"
+                ).select_related("employee")
+                if emp
+                else LeaveRequest.objects.none()
+            )
+            reviews = PerformanceReview.objects.none()
+
+        ics_text = generate_icalendar_feed(profile, holidays, leaves, reviews)
+        response = HttpResponse(ics_text, content_type="text/calendar; charset=utf-8")
+        response["Content-Disposition"] = 'inline; filename="ems_calendar.ics"'
+        return response
+
+
+class CalendarTokenAPIView(APIView):
+    """
+    Retrieve or regenerate the authenticated user's private calendar subscription token & feed URL.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        profile = getattr(request.user, "profile", None)
+        if not profile:
+            return Response(
+                {"detail": "User profile not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        token = profile.get_or_create_calendar_token()
+        feed_url = request.build_absolute_uri(f"/api/calendar/feed/{token}/")
+        webcal_url = feed_url.replace("http://", "webcal://").replace(
+            "https://", "webcal://"
+        )
+
+        return Response(
+            {
+                "calendar_token": token,
+                "feed_url": feed_url,
+                "webcal_url": webcal_url,
+            }
+        )
+
+    def post(self, request):
+        """Regenerate calendar token (invalidates old subscription URLs)."""
+        import secrets
+
+        profile = getattr(request.user, "profile", None)
+        if not profile:
+            return Response(
+                {"detail": "User profile not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        profile.calendar_token = secrets.token_urlsafe(32)
+        profile.save(update_fields=["calendar_token"])
+        feed_url = request.build_absolute_uri(
+            f"/api/calendar/feed/{profile.calendar_token}/"
+        )
+        webcal_url = feed_url.replace("http://", "webcal://").replace(
+            "https://", "webcal://"
+        )
+
+        return Response(
+            {
+                "detail": "Calendar token successfully regenerated.",
+                "calendar_token": profile.calendar_token,
+                "feed_url": feed_url,
+                "webcal_url": webcal_url,
             }
         )
