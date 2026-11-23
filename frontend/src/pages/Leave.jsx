@@ -11,6 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Download,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { leaveApi, employeeApi } from '../api';
 import { useAuth } from '../context/useAuth';
@@ -63,6 +65,7 @@ export default function Leave() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const [busyId, setBusyId] = useState(null);
   const [toast, setToast] = useState(null);
@@ -248,6 +251,33 @@ export default function Leave() {
   const getTypeLabel = (code) =>
     LEAVE_TYPES.find((t) => t.value === code)?.label || code;
 
+  const handleExport = async (format = 'xlsx') => {
+    try {
+      setExporting(true);
+      const params = { format };
+      if (employeeFilter) params.employee = employeeFilter;
+      if (statusFilter) params.status = statusFilter;
+      if (typeFilter) params.leave_type = typeFilter;
+
+      const blob = await leaveApi.export(params);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const ext = format === 'xlsx' ? 'xlsx' : 'csv';
+      link.download = `leave_requests_${new Date().toISOString().slice(0, 10)}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showToast(`Leave report exported as ${format.toUpperCase()}.`);
+    } catch (err) {
+      console.error('Leave export failed:', err);
+      showToast(`Failed to export leave report as ${format.toUpperCase()}.`, 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="leave-page animate-fade-in">
       {/* Toast Notification */}
@@ -272,10 +302,30 @@ export default function Leave() {
           <h1>Leave Management</h1>
           <p>Review, approve, and track employee time-off requests.</p>
         </div>
-        <button onClick={handleOpenModal} className="btn btn-primary">
-          <Plus size={18} />
-          <span>New Leave Request</span>
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => handleExport('xlsx')}
+            className="btn btn-secondary"
+            disabled={exporting}
+            title="Export leave records to Excel"
+          >
+            {exporting ? <Loader2 size={16} className="spin" /> : <FileSpreadsheet size={16} />}
+            <span>Export Excel</span>
+          </button>
+          <button
+            onClick={() => handleExport('csv')}
+            className="btn btn-secondary"
+            disabled={exporting}
+            title="Export leave records to CSV"
+          >
+            <Download size={16} />
+            <span>Export CSV</span>
+          </button>
+          <button onClick={handleOpenModal} className="btn btn-primary">
+            <Plus size={18} />
+            <span>New Leave Request</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Bar */}
