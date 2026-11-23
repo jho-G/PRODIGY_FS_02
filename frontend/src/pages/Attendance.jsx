@@ -13,8 +13,11 @@ import {
   Loader2,
   Download,
   FileSpreadsheet,
+  TrendingUp,
+  Plus,
+  Check,
 } from 'lucide-react';
-import { attendanceApi, employeeApi } from '../api';
+import { attendanceApi, employeeApi, overtimeApi } from '../api';
 import { useAuth } from '../context/useAuth';
 import './Attendance.css';
 
@@ -61,10 +64,40 @@ export default function Attendance() {
   const [toast, setToast] = useState(null);
   const [exporting, setExporting] = useState(false);
 
+  // Shifts & Overtime
+  const [myShift, setMyShift] = useState(null);
+  const [overtimes, setOvertimes] = useState([]);
+  const [showOvertimeModal, setShowOvertimeModal] = useState(false);
+  const [overtimeForm, setOvertimeForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    hours: 2,
+    rate_multiplier: 1.5,
+    compensation_type: 'PAYOUT',
+    reason: '',
+  });
+
   const showToast = (message, type = 'summary') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
+
+  const fetchMyShift = useCallback(async () => {
+    try {
+      const data = await attendanceApi.getMyShift();
+      setMyShift(data.shift);
+    } catch (err) {
+      console.warn('Could not fetch shift details:', err);
+    }
+  }, []);
+
+  const fetchOvertimes = useCallback(async () => {
+    try {
+      const data = await overtimeApi.getAll();
+      setOvertimes(data.results || (Array.isArray(data) ? data : []));
+    } catch (err) {
+      console.warn('Could not fetch overtime records:', err);
+    }
+  }, []);
 
   const fetchTodayRecord = useCallback(async () => {
     try {
@@ -85,7 +118,8 @@ export default function Attendance() {
 
   useEffect(() => {
     fetchTodayRecord();
-  }, [fetchTodayRecord]);
+    fetchMyShift();
+  }, [fetchTodayRecord, fetchMyShift]);
 
   // Debounce employee-name search
   useEffect(() => {
@@ -233,18 +267,92 @@ export default function Attendance() {
   const handleQuickPunch = async () => {
     try {
       setPunching(true);
-      const res = await attendanceApi.punch();
+      let coords = {};
+      if (navigator.geolocation) {
+        try {
+          const pos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              timeout: 6000,
+              enableHighAccuracy: true,
+            });
+          });
+          coords = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          };
+        } catch (geoErr) {
+          console.warn('Geolocation capture skipped or denied:', geoErr);
+        }
+      }
+
+      const res = await attendanceApi.punch(coords);
       if (res.check_out) {
         showToast(`Clock-out recorded at ${formatTime(res.check_out)}.`);
       } else {
-        showToast(`Clock-in recorded at ${formatTime(res.check_in)}.`);
+        const flagMsg = res.is_flagged
+          ? ` (⚠️ ${res.flag_reason || 'Outside geofence boundary'})`
+          : ' (📍 Geofence Verified)';
+        showToast(`Clock-in recorded at ${formatTime(res.check_in)}${flagMsg}`);
       }
+      fetchTodayRecord();
       fetchRecords();
     } catch (err) {
       console.error('Punch failed:', err);
       showToast(err.response?.data?.detail || 'Punch failed.', 'error');
     } finally {
       setPunching(false);
+    }
+  };
+
+  const handleResolveFlag = async (id) => {
+    const notes = window.prompt(
+      'Enter resolution note for manager authorization:',
+      'Approved off-site work'
+    );
+    if (notes === null) return;
+    try {
+      await attendanceApi.resolveFlag(id, { notes });
+      showToast('Geofence punch flag resolved.');
+      fetchRecords();
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to resolve flag.', 'error');
+    }
+  };
+
+  const handleSaveOvertime = async (e) => {
+    e.preventDefault();
+    try {
+      await overtimeApi.create({
+        ...overtimeForm,
+        hours: parseFloat(overtimeForm.hours),
+        rate_multiplier: parseFloat(overtimeForm.rate_multiplier),
+        employee: employeeId,
+      });
+      showToast('Overtime logged and submitted for manager approval.');
+      setShowOvertimeModal(false);
+      fetchOvertimes();
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to submit overtime.', 'error');
+    }
+  };
+
+  const handleApproveOvertime = async (id) => {
+    try {
+      await overtimeApi.approve(id);
+      showToast('Overtime request approved.');
+      fetchOvertimes();
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to approve overtime.', 'error');
+    }
+  };
+
+  const handleRejectOvertime = async (id) => {
+    try {
+      await overtimeApi.reject(id);
+      showToast('Overtime request rejected.');
+      fetchOvertimes();
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to reject overtime.', 'error');
     }
   };
 
@@ -385,25 +493,57 @@ export default function Attendance() {
               <Clock size={16} />
               <span>Monthly Summary</span>
             </button>
+            <button
+              className={`btn btn-sm ${view === 'overtime' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => {
+                setView('overtime');
+                fetchOvertimes();
+              }}
+            >
+              <TrendingUp size={16} />
+              <span>Overtime & Comp-Off</span>
+            </button>
           </div>
-          <button
-            onClick={() => handleExport('xlsx')}
-            className="btn btn-sm btn-secondary"
-            disabled={exporting}
-            title="Export attendance records to Excel"
-          >
-            {exporting ? <Loader2 size={16} className="spin" /> : <FileSpreadsheet size={16} />}
-            <span>Export Excel</span>
-          </button>
-          <button
-            onClick={() => handleExport('csv')}
-            className="btn btn-sm btn-secondary"
-            disabled={exporting}
-            title="Export attendance records to CSV"
-          >
-            <Download size={16} />
-            <span>Export CSV</span>
-          </button>
+          {view === 'overtime' && (
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={() => {
+                setOvertimeForm({
+                  date: new Date().toISOString().split('T')[0],
+                  hours: 2,
+                  rate_multiplier: 1.5,
+                  compensation_type: 'PAYOUT',
+                  reason: '',
+                });
+                setShowOvertimeModal(true);
+              }}
+            >
+              <Plus size={16} />
+              <span>Log Overtime</span>
+            </button>
+          )}
+          {view !== 'overtime' && (
+            <>
+              <button
+                onClick={() => handleExport('xlsx')}
+                className="btn btn-sm btn-secondary"
+                disabled={exporting}
+                title="Export attendance records to Excel"
+              >
+                {exporting ? <Loader2 size={16} className="spin" /> : <FileSpreadsheet size={16} />}
+                <span>Export Excel</span>
+              </button>
+              <button
+                onClick={() => handleExport('csv')}
+                className="btn btn-sm btn-secondary"
+                disabled={exporting}
+                title="Export attendance records to CSV"
+              >
+                <Download size={16} />
+                <span>Export CSV</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -421,7 +561,11 @@ export default function Attendance() {
               {!todayRecord || !todayRecord.check_in ? (
                 <>
                   <span className="today-status-badge status-not-started">Not clocked in today</span>
-                  <span className="today-cutoff-note">• Check-ins after 09:00 AM auto-flag as Late</span>
+                  <span className="today-cutoff-note">
+                    {myShift
+                      ? `• Shift: ${myShift.name} (${myShift.start_time?.slice(0, 5)} - ${myShift.end_time?.slice(0, 5)}, ${myShift.grace_period_minutes}m grace)`
+                      : '• Standard Shift (09:00 AM cutoff)'}
+                  </span>
                 </>
               ) : !todayRecord.check_out ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -582,7 +726,9 @@ export default function Attendance() {
                   <tr>
                     <th>Employee</th>
                     <th>Date</th>
+                    <th>Shift</th>
                     <th>Status</th>
+                    <th>Geofence</th>
                     <th>Check In</th>
                     <th>Check Out</th>
                     <th>Hours</th>
@@ -592,14 +738,14 @@ export default function Attendance() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '36px' }}>
+                      <td colSpan="9" style={{ textAlign: 'center', padding: '36px' }}>
                         <div className="spinner-primary" style={{ margin: '0 auto 12px' }} />
                         <p>Loading attendance records...</p>
                       </td>
                     </tr>
                   ) : records.length === 0 ? (
                     <tr>
-                      <td colSpan="7">
+                      <td colSpan="9">
                         <div className="empty-table-state">
                           <CalendarCheck size={40} style={{ opacity: 0.4 }} />
                           <p>No attendance records match the current filters.</p>
@@ -628,7 +774,36 @@ export default function Attendance() {
                           </div>
                         </td>
                         <td>{record.date}</td>
+                        <td>
+                          {record.shift_name ? (
+                            <span className="badge badge-secondary">{record.shift_name}</span>
+                          ) : (
+                            <span style={{ color: 'var(--muted)', fontSize: '12px' }}>Default</span>
+                          )}
+                        </td>
                         <td>{statusBadge(record.status)}</td>
+                        <td>
+                          {record.is_geofence_verified ? (
+                            <span className="badge badge-success" title="Verified within office geofence">📍 Verified</span>
+                          ) : record.is_flagged ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span className="badge badge-warning" title={record.flag_reason || 'Outside boundary'}>⚠️ Flagged</span>
+                              {isManager && (
+                                <button
+                                  type="button"
+                                  className="btn btn-xs btn-outline"
+                                  style={{ fontSize: '11px', padding: '2px 5px', cursor: 'pointer' }}
+                                  onClick={() => handleResolveFlag(record.id)}
+                                  title="Approve / Resolve Flag"
+                                >
+                                  Resolve
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--muted)', fontSize: '12px' }}>—</span>
+                          )}
+                        </td>
                         <td>{formatTime(record.check_in)}</td>
                         <td>{formatTime(record.check_out)}</td>
                         <td>
@@ -711,7 +886,7 @@ export default function Attendance() {
             </div>
           </div>
         </>
-      ) : (
+      ) : view === 'summary' ? (
         <>
           {/* Summary Controls */}
           <div className="filter-bar">
@@ -857,6 +1032,190 @@ export default function Attendance() {
             </div>
           </div>
         </>
+      ) : (
+        <>
+          {/* Overtime & Comp-Off View */}
+          <div className="table-card">
+            <div className="table-responsive">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Date</th>
+                    <th>Overtime Hours</th>
+                    <th>Multiplier</th>
+                    <th>Compensation Plan</th>
+                    <th>Status</th>
+                    <th>Reason</th>
+                    {isManager && <th>Review Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {overtimes.length === 0 ? (
+                    <tr>
+                      <td colSpan={isManager ? 8 : 7} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
+                        No overtime requests recorded. Log extra hours worked using the "Log Overtime" button.
+                      </td>
+                    </tr>
+                  ) : (
+                    overtimes.map((ot) => (
+                      <tr key={ot.id}>
+                        <td>
+                          <div className="employee-cell">
+                            <div>
+                              <div className="employee-name">{ot.employee_name}</div>
+                              <div className="employee-sub">{ot.employee_id_code}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>{ot.date}</td>
+                        <td>
+                          <span className="badge badge-info">{ot.hours} hrs</span>
+                        </td>
+                        <td>{ot.rate_multiplier}x</td>
+                        <td>
+                          {ot.compensation_type === 'COMP_OFF' ? (
+                            <span className="badge badge-secondary">Compensatory Off (Leave)</span>
+                          ) : (
+                            <span className="badge badge-primary">Payroll Payout</span>
+                          )}
+                        </td>
+                        <td>
+                          {ot.status === 'APPROVED' ? (
+                            <span className="badge badge-success">Approved</span>
+                          ) : ot.status === 'REJECTED' ? (
+                            <span className="badge badge-danger">Rejected</span>
+                          ) : (
+                            <span className="badge badge-warning">Pending Review</span>
+                          )}
+                          {ot.is_processed && <span className="badge badge-info" style={{ marginLeft: '4px' }}>Processed</span>}
+                        </td>
+                        <td style={{ maxWidth: '240px', fontSize: '12px', color: 'var(--muted)' }}>
+                          {ot.reason || '—'}
+                        </td>
+                        {isManager && (
+                          <td>
+                            {ot.status === 'PENDING' ? (
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                  className="btn btn-xs btn-primary"
+                                  onClick={() => handleApproveOvertime(ot.id)}
+                                  title="Approve Overtime"
+                                >
+                                  <Check size={12} />
+                                  <span>Approve</span>
+                                </button>
+                                <button
+                                  className="btn btn-xs btn-danger"
+                                  onClick={() => handleRejectOvertime(ot.id)}
+                                  title="Reject Overtime"
+                                >
+                                  <X size={12} />
+                                  <span>Reject</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                                {ot.status} by {ot.approved_by_username || 'system'}
+                              </span>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Log Overtime Modal */}
+      {showOvertimeModal && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h2>Log Overtime Hours</h2>
+              <button className="modal-close" onClick={() => setShowOvertimeModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveOvertime} className="modal-body">
+              <div className="form-group">
+                <label className="form-label">Overtime Date *</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  value={overtimeForm.date}
+                  onChange={(e) => setOvertimeForm({ ...overtimeForm, date: e.target.value })}
+                  required
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label">Extra Hours Worked *</label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0.5"
+                    max="16"
+                    className="form-control"
+                    value={overtimeForm.hours}
+                    onChange={(e) => setOvertimeForm({ ...overtimeForm, hours: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Pay Multiplier</label>
+                  <select
+                    className="form-control"
+                    value={overtimeForm.rate_multiplier}
+                    onChange={(e) => setOvertimeForm({ ...overtimeForm, rate_multiplier: e.target.value })}
+                  >
+                    <option value="1.5">1.5x (Standard Overtime)</option>
+                    <option value="2.0">2.0x (Holiday / Weekend)</option>
+                    <option value="1.0">1.0x (Flat Rate)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Compensation Choice *</label>
+                <select
+                  className="form-control"
+                  value={overtimeForm.compensation_type}
+                  onChange={(e) => setOvertimeForm({ ...overtimeForm, compensation_type: e.target.value })}
+                  required
+                >
+                  <option value="PAYOUT">Payroll Hourly Payout (Next Paycheck)</option>
+                  <option value="COMP_OFF">Compensatory Off (Credit to Leave Balance)</option>
+                </select>
+                <small style={{ color: 'var(--muted)', fontSize: '11px', display: 'block', marginTop: '4px' }}>
+                  Comp-off automatically credits 1 leave day per 8 overtime hours upon manager approval.
+                </small>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Reason / Work Delivered *</label>
+                <textarea
+                  className="form-control"
+                  rows={2}
+                  placeholder="e.g. Production emergency hotfix, end-of-quarter client reporting"
+                  value={overtimeForm.reason}
+                  onChange={(e) => setOvertimeForm({ ...overtimeForm, reason: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowOvertimeModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Submit Overtime Request
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
